@@ -37,6 +37,13 @@ class ConflictError(AppError):
     error_code = "conflict"
 
 
+class UnprocessableError(AppError):
+    """Raised when a request is well-formed but cannot be processed as given."""
+
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    error_code = "unprocessable"
+
+
 async def _app_error_handler(_: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, AppError)
     return JSONResponse(

@@ -18,8 +18,9 @@ from app.services.ollama_service import get_installed_ollama_models, is_ollama_r
 router = APIRouter(prefix="/device", tags=["Device & AI Model Setup"])
 
 
-@router.post(
+@router.api_route(
     "/detect",
+    methods=["GET", "POST"],
     response_model=DeviceSpecsDetect,
     summary="Auto-detect host hardware specs",
     description="Detect host machine RAM, GPU/VRAM, CPU cores, free disk storage, and OS.",

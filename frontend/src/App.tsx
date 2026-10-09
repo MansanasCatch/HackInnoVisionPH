@@ -1,11 +1,31 @@
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { api } from "./api/client";
+import {
+  mapAgeRangeToNumber,
+  mapFlashcardsFromMaterials,
+  mapNotesFromMaterials,
+  mapQuizQuestionsFromMaterials,
+} from "./api/mappers";
+import {
+  ActiveModelStatus,
+  DeviceSpecs,
+  DeviceSuggestions,
+  GeneratedLearningResource,
+  KnowledgeMapItem,
+  LearningResourceRead,
+  LearningResourceVersionRead,
+  StudyMaterialsResponse,
+  StudySessionRead,
+} from "./api/types";
 
 type Page =
   | "home" | "tutor" | "planner" | "focus" | "lessons" | "ingest" | "generation"
   | "library" | "notes" | "flashcards" | "quiz" | "completion" | "knowledge"
   | "recommendations" | "report" | "settings" | "coach" | "progress";
 type ProfileData = {
+  id?: number;
   name: string;
+  age?: number;
   level: string;
   subjects: string[];
   examDate: string;
@@ -132,15 +152,31 @@ function ProgressRing({ value, label }: { value: number; label: string }) {
   return <div className="progress-ring" style={{ "--progress": `${value * 3.6}deg` } as React.CSSProperties}><div><strong>{value}%</strong><small>{label}</small></div></div>;
 }
 
-function Home({ go, online, openOffline, profile }: { go: (p: Page) => void; online: boolean; openOffline: () => void; profile: ProfileData }) {
+function Home({
+  go,
+  online,
+  openOffline,
+  profile,
+  activeResource,
+  activeMaterials,
+}: {
+  go: (p: Page) => void;
+  online: boolean;
+  openOffline: () => void;
+  profile: ProfileData;
+  activeResource?: LearningResourceRead | null;
+  activeMaterials?: Partial<StudyMaterialsResponse> | null;
+}) {
   const firstName = profile.name.trim().split(" ")[0] || "Learner";
-  const focusSubject = profile.subjects[0] || "Mathematics";
+  const focusSubject = activeResource?.subject || profile.subjects[0] || "Mathematics";
+  const currentTopic = activeResource?.title || activeMaterials?.topic || "Cell division & mitosis";
+
   return <div className="page home-page">
     <section className="hero">
       <div className="hero-copy">
         <Badge tone="peach">WELCOME BACK</Badge>
         <h2>Ready to learn, {firstName}?</h2>
-        <p>Start with {focusSubject.toLowerCase()}, create new resources, or review your learning report.</p>
+        <p>Continue with {focusSubject.toLowerCase()}, create new resources, or review your learning report.</p>
         <div className="hero-actions"><Button onClick={() => go("planner")} icon="play">Begin learning</Button><span>Choose your study mode</span></div>
       </div>
       <div className="hero-visual" aria-hidden="true">
@@ -163,64 +199,110 @@ function Home({ go, online, openOffline, profile }: { go: (p: Page) => void; onl
       <section className="panel today-panel">
         <div className="section-heading"><div><p className="eyebrow">SUGGESTED NEXT</p><h3>Your study plan</h3></div><button className="text-button" onClick={() => go("planner")}>Open Study Mode <Icon name="chevron" size={15}/></button></div>
         <div className="timeline">
-          <div className="timeline-item"><span className="timeline-dot">1</span><div><strong>Review cell structure</strong><small>12 flashcards · suggested</small></div><span>20 min</span></div>
-          <div className="timeline-item current"><span className="timeline-dot">2</span><div><strong>Quadratic equations</strong><small>Worked examples · up next</small><div className="mini-progress"><span/></div></div><span>25 min</span></div>
-          <div className="timeline-item"><span className="timeline-dot">3</span><div><strong>French Revolution</strong><small>Summary + quick quiz</small></div><span>30 min</span></div>
+          <div className="timeline-item"><span className="timeline-dot">1</span><div><strong>Review {currentTopic}</strong><small>{activeMaterials?.flashcards?.length || 3} flashcards · saved</small></div><span>20 min</span></div>
+          <div className="timeline-item current"><span className="timeline-dot">2</span><div><strong>Practice {currentTopic}</strong><small>{activeMaterials?.quizzes?.length || 3} questions · up next</small><div className="mini-progress"><span/></div></div><span>25 min</span></div>
+          <div className="timeline-item"><span className="timeline-dot">3</span><div><strong>Comprehensive Review</strong><small>Summary + knowledge checks</small></div><span>30 min</span></div>
         </div>
       </section>
     </div>
 
     <section className="section-block">
-      <div className="section-heading"><div><p className="eyebrow">SAVED FOR YOU</p><h3>Pick up where you left off</h3></div><button className="text-button" onClick={() => go("lessons")}>View all <Icon name="arrow" size={15}/></button></div>
+      <div className="section-heading"><div><p className="eyebrow">SAVED FOR YOU</p><h3>Pick up where you left off</h3></div><button className="text-button" onClick={() => go("library")}>View all <Icon name="arrow" size={15}/></button></div>
       <div className="resource-row">
-        <button className="resource-card" onClick={() => go("notes")}><span className="subject-art biology"><Icon name="book" size={30}/></span><span><Badge>Biology</Badge><strong>Cell division & mitosis</strong><small><Icon name="clock" size={14}/> Key notes · demo source</small></span></button>
-        <button className="resource-card" onClick={() => go("flashcards")}><span className="subject-art maths"><Icon name="cards" size={30}/></span><span><Badge tone="peach">Biology</Badge><strong>Mitosis recall cards</strong><small><Icon name="cards" size={14}/> 3 flashcards · offline</small></span></button>
-        <button className="resource-card" onClick={() => go("quiz")}><span className="subject-art history"><Icon name="quiz" size={30}/></span><span><Badge tone="blue">Biology</Badge><strong>Cell division reviewer</strong><small><Icon name="quiz" size={14}/> Practice quiz · 3 questions</small></span></button>
+        <button className="resource-card" onClick={() => go("notes")}><span className="subject-art biology"><Icon name="book" size={30}/></span><span><Badge>{focusSubject}</Badge><strong>{currentTopic}</strong><small><Icon name="clock" size={14}/> Key notes & summary</small></span></button>
+        <button className="resource-card" onClick={() => go("flashcards")}><span className="subject-art maths"><Icon name="cards" size={30}/></span><span><Badge tone="peach">{focusSubject}</Badge><strong>{currentTopic} cards</strong><small><Icon name="cards" size={14}/> {activeMaterials?.flashcards?.length || 3} recall cards</small></span></button>
+        <button className="resource-card" onClick={() => go("quiz")}><span className="subject-art history"><Icon name="quiz" size={30}/></span><span><Badge tone="blue">{focusSubject}</Badge><strong>{currentTopic} reviewer</strong><small><Icon name="quiz" size={14}/> {activeMaterials?.quizzes?.length || 3} questions</small></span></button>
       </div>
     </section>
   </div>;
 }
 
-function Tutor({ online }: { online: boolean }) {
-  const [messages, setMessages] = useState([
-    { role: "user", text: "Why does the sign change when I move a number to the other side of an equation?" },
-    { role: "tutor", text: "Think of an equation like a balanced scale. You’re not really “moving” the number—you’re doing the opposite operation to both sides so the scale stays balanced.", detail: "For example: x + 3 = 8. Subtract 3 from both sides: x + 3 − 3 = 8 − 3, so x = 5." },
+function Tutor({
+  online,
+  onboardingId,
+  currentTopic = "General Studies",
+}: {
+  online: boolean;
+  onboardingId?: number;
+  currentTopic?: string;
+}) {
+  const [messages, setMessages] = useState<Array<{ role: "user" | "tutor"; text: string; detail?: string }>>([
+    {
+      role: "tutor",
+      text: `Hello! I'm Lumi, your local AI learning companion. Ask me any question about ${currentTopic} or whatever you're reviewing.`,
+      detail: "I run privately and offline on your device.",
+    },
   ]);
   const [input, setInput] = useState("");
-  const [detail, setDetail] = useState(false);
-  const send = (text = input) => {
-    if (!text.trim()) return;
-    setMessages(m => [...m, { role: "user", text }, { role: "tutor", text: online ? "Let’s take it one small step at a time. I’ll use the balance idea and show you what changes on each side." : "Live AI help needs an internet connection. Your saved explanation and practice cards are still available offline.", detail: online ? "Start by identifying the operation attached to the number. Then apply its inverse to both sides." : undefined }]);
+  const [loading, setLoading] = useState(false);
+  const [detail, setDetail] = useState(true);
+
+  const send = async (text = input) => {
+    const question = text.trim();
+    if (!question || loading) return;
+
+    setMessages(m => [...m, { role: "user", text: question }]);
     setInput("");
+    setLoading(true);
+
+    try {
+      const res = await api.aiGenerate({
+        prompt: question,
+        topic: currentTopic,
+        onboarding_id: onboardingId,
+        system_prompt: `You are Lumi, a patient, encouraging, and clear AI tutor. Keep explanations focused and easy to follow.`,
+      });
+
+      setMessages(m => [
+        ...m,
+        {
+          role: "tutor",
+          text: res.response,
+          detail: `Model: ${res.model_used || "Local AI"} · ${res.execution_time_seconds.toFixed(1)}s`,
+        },
+      ]);
+    } catch (err: any) {
+      setMessages(m => [
+        ...m,
+        {
+          role: "tutor",
+          text: online
+            ? `I couldn't process that question right now: ${err?.message || "Unknown error"}`
+            : "Offline AI tutor: You are currently offline. Please ensure Ollama is running or reconnect your device.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
+
   return <div className="tutor-layout">
     <section className="chat-area">
-      <div className="chat-intro"><Lumi size="medium"/><div><Badge tone={online ? "sage" : "neutral"}>{online ? "LUMI · AI TUTOR ONLINE" : "LUMI · LIVE HELP UNAVAILABLE"}</Badge><h2>Let’s figure this out together.</h2><p>Ask Lumi a question, or choose a quick way to continue.</p></div></div>
+      <div className="chat-intro"><Lumi size="medium"/><div><Badge tone={online ? "sage" : "neutral"}>{online ? "LUMI · AI TUTOR ACTIVE" : "LUMI · OFFLINE"}</Badge><h2>Let’s figure this out together.</h2><p>Ask Lumi a question, or choose a quick way to continue.</p></div></div>
       <div className="messages">
         {messages.map((m, i) => <div key={i} className={`message-row ${m.role}`}>
           {m.role === "tutor" && <Lumi size="small"/>}
-          <div className="message-bubble"><p>{m.text}</p>{m.detail && <div className="worked-example"><strong>Worked example</strong><p>{m.detail}</p></div>}
-            {m.role === "tutor" && i === 1 && <><button className="disclosure" onClick={() => setDetail(!detail)}>{detail ? "Hide" : "Show"} why this works <Icon name="chevron" size={14}/></button>{detail && <p className="detail-copy">Adding and subtracting the same amount preserves equality. Both sides change equally, so the relationship stays true.</p>}</>}
+          <div className="message-bubble"><p style={{ whiteSpace: "pre-wrap" }}>{m.text}</p>{m.detail && <div className="worked-example"><strong>Details</strong><p>{m.detail}</p></div>}
           </div>
         </div>)}
+        {loading && (
+          <div className="message-row tutor">
+            <Lumi size="small"/>
+            <div className="message-bubble"><p><em>Lumi is thinking locally on your device…</em></p></div>
+          </div>
+        )}
       </div>
-      <div className="suggestion-row">{["Explain it simply", "Show me another example", "Test my understanding"].map(x => <button key={x} onClick={() => send(x)}>{x}</button>)}</div>
+      <div className="suggestion-row">{["Explain it simply", "Give me a practice question", "Summarize key formulas"].map(x => <button key={x} onClick={() => send(x)} disabled={loading}>{x}</button>)}</div>
       <form className="composer" onSubmit={(e: FormEvent) => { e.preventDefault(); send(); }}>
-        <button type="button" className="composer-icon" aria-label="Add learning material"><Icon name="plus"/></button>
-        <input value={input} onChange={e => setInput(e.target.value)} placeholder="Ask a follow-up question…" aria-label="Tutor question"/>
-        <button type="button" className="composer-icon" aria-label="Use voice input" title={online ? "Voice input prototype" : "Voice unavailable offline"}><Icon name="mic"/></button>
-        <button type="submit" className="send-button" aria-label="Send question"><Icon name="send"/></button>
+        <input value={input} disabled={loading} onChange={e => setInput(e.target.value)} placeholder={loading ? "Lumi is generating…" : "Ask a question about this topic…"} aria-label="Tutor question"/>
+        <button type="submit" disabled={loading || !input.trim()} className="send-button" aria-label="Send question"><Icon name="send"/></button>
       </form>
-      <p className="prototype-note">Demo tutor responses are pre-written for this prototype; no live AI model is connected.</p>
     </section>
     <aside className="context-panel">
-      <p className="eyebrow">CURRENT CONTEXT</p><h3>Quadratic equations</h3>
-      <div className="context-meta"><span><Icon name="book" size={16}/> Mathematics</span><span><Icon name="clock" size={16}/> Studying 14 min</span></div>
+      <p className="eyebrow">CURRENT CONTEXT</p><h3>{currentTopic}</h3>
+      <div className="context-meta"><span><Icon name="book" size={16}/> Active Study</span><span><Icon name="spark" size={16}/> Local AI Engine</span></div>
       <hr/>
-      <p className="eyebrow">SAVE THIS EXPLANATION AS</p>
-      <button className="context-action"><Icon name="cards"/><span><strong>Flashcards</strong><small>3 suggested cards</small></span><Icon name="plus"/></button>
-      <button className="context-action"><Icon name="quiz"/><span><strong>Quick practice</strong><small>4 understanding checks</small></span><Icon name="plus"/></button>
-      <div className="support-note"><Icon name="download"/><p><strong>Available offline</strong><br/>Saved cards and quizzes work without a connection.</p></div>
+      <div className="support-note"><Icon name="download"/><p><strong>Local & Offline</strong><br/>All chat questions are processed on your device.</p></div>
     </aside>
   </div>;
 }
@@ -282,25 +364,54 @@ function Planner({ start }: { start: () => void }) {
   </div>;
 }
 
-function Focus({ exit, completeSession }: { exit: () => void; completeSession: (score: number, total: number) => void }) {
+function Focus({
+  exit,
+  completeSession,
+  materials,
+}: {
+  exit: () => void;
+  completeSession: (score: number, total: number) => void;
+  materials?: Partial<StudyMaterialsResponse> | null;
+}) {
   const [step, setStep] = useState(0);
   const [paused, setPaused] = useState(false);
   const [flipped, setFlipped] = useState(false);
   const [answer, setAnswer] = useState<number | null>(null);
+
+  const topicTitle = materials?.topic || "Quadratic equations";
+  const keyIdea = materials?.summary?.content ||
+    materials?.reviewer?.sections?.[0]?.content ||
+    "Undo each operation in reverse order. To isolate x, treat the equation like a wrapped gift.";
+  const keyTakeaway = materials?.reviewer?.sections?.[0]?.key_points?.[0] ||
+    "Subtract 6 first, then divide by 2. This reverses the original operations.";
+
+  const cardQuestion = materials?.flashcards?.[0]?.question || "How do you keep an equation balanced?";
+  const cardAnswer = materials?.flashcards?.[0]?.answer || "Apply the inverse operation to both sides. Whatever you do to one side, do to the other.";
+
+  const firstQuiz = materials?.quizzes?.[0];
+  const quizQ = firstQuiz?.question || "What is the first step to solve 3x − 4 = 11?";
+  const quizOpts = firstQuiz?.options && firstQuiz.options.length > 0
+    ? firstQuiz.options
+    : ["Divide both sides by 3", "Add 4 to both sides", "Subtract 11 from both sides"];
+  const correctOptIdx = firstQuiz?.options
+    ? firstQuiz.options.findIndex(opt => opt === firstQuiz.correct_answer || opt.toLowerCase() === firstQuiz.correct_answer.toLowerCase())
+    : 1;
+  const targetCorrectIdx = correctOptIdx >= 0 ? correctOptIdx : 1;
+
   return <div className="focus-shell">
-    <header className="focus-header"><button className="brand" onClick={exit}><span className="brand-mark"><Icon name="spark" size={18}/></span><span>Lumi</span></button><div className="focus-progress"><span><strong>Quadratic equations</strong><small>Activity {step + 1} of 3 · {25 - step * 8} min remaining</small></span><div><i style={{ width: `${(step + 1) * 33}%` }}/></div></div><Button onClick={() => setPaused(!paused)} variant="secondary" icon={paused ? "play" : "pause"}>{paused ? "Resume" : "Pause"}</Button></header>
+    <header className="focus-header"><button className="brand" onClick={exit}><span className="brand-mark"><Icon name="spark" size={18}/></span><span>Lumi</span></button><div className="focus-progress"><span><strong>{topicTitle}</strong><small>Activity {step + 1} of 3 · {25 - step * 8} min remaining</small></span><div><i style={{ width: `${(step + 1) * 33}%` }}/></div></div><Button onClick={() => setPaused(!paused)} variant="secondary" icon={paused ? "play" : "pause"}>{paused ? "Resume" : "Pause"}</Button></header>
     <main className="focus-main">
       {paused ? <div className="pause-state"><div className="complete-mark"><Icon name="pause"/></div><h2>Session paused.</h2><p>Take the time you need. Your place is saved on this device.</p><Button onClick={() => setPaused(false)} icon="play">Resume when ready</Button></div> :
       <><div className="focus-kicker"><span>ACTIVITY {step + 1}</span><Badge tone="blue">{step === 0 ? "CONCEPT" : step === 1 ? "FLASHCARD" : "QUICK CHECK"}</Badge></div>
-      {step === 0 && <article className="learning-card"><p className="eyebrow">THE KEY IDEA</p><h2>Undo each operation in reverse order.</h2><p>To isolate <b>x</b>, treat the equation like a wrapped gift. Remove the outermost “layer” first, and do the same thing to both sides.</p><div className="equation"><span>2x + 6 = 18</span><Icon name="arrow"/><span>2x = 12</span><Icon name="arrow"/><span>x = 6</span></div><div className="callout"><Icon name="spark"/><p><strong>Notice the order:</strong> subtract 6 first, then divide by 2. This reverses the original operations.</p></div></article>}
-      {step === 1 && <button className={`flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)}><span className="eyebrow">{flipped ? "ANSWER" : "TAP TO REVEAL"}</span><strong>{flipped ? "Apply the inverse operation to both sides." : "How do you keep an equation balanced?"}</strong><small>{flipped ? "Whatever you do to one side, do to the other." : "Think about the balance-scale analogy."}</small></button>}
-      {step === 2 && <article className="learning-card quiz-card"><p className="eyebrow">TRY THIS</p><h2>What is the first step to solve 3x − 4 = 11?</h2>{["Divide both sides by 3", "Add 4 to both sides", "Subtract 11 from both sides"].map((x, i) => <button key={x} className={`answer-option ${answer === i ? "selected" : ""}`} onClick={() => setAnswer(i)} aria-pressed={answer === i}><span>{String.fromCharCode(65 + i)}</span>{x}</button>)}</article>}
-      <div className="focus-footer"><p>{step === 0 ? "Read at your own pace." : step === 1 ? "Retrieval practice strengthens memory." : "Choose the best first step."}</p><Button disabled={step === 2 && answer === null} onClick={() => step === 2 ? completeSession(answer === 1 ? 1 : 0, 1) : setStep(step + 1)} icon="arrow">{step === 2 ? "Finish session" : "Next"}</Button></div></>}
+      {step === 0 && <article className="learning-card"><p className="eyebrow">THE KEY IDEA</p><h2>{topicTitle}</h2><p style={{ whiteSpace: "pre-line" }}>{keyIdea}</p><div className="callout"><Icon name="spark"/><p><strong>Core Concept:</strong> {keyTakeaway}</p></div></article>}
+      {step === 1 && <button className={`flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)}><span className="eyebrow">{flipped ? "ANSWER" : "TAP TO REVEAL"}</span><strong>{flipped ? cardAnswer : cardQuestion}</strong><small>{flipped ? "Tap to flip back" : "Think about the concept before flipping"}</small></button>}
+      {step === 2 && <article className="learning-card quiz-card"><p className="eyebrow">TRY THIS</p><h2>{quizQ}</h2>{quizOpts.map((x, i) => <button key={x} className={`answer-option ${answer === i ? "selected" : ""}`} onClick={() => setAnswer(i)} aria-pressed={answer === i}><span>{String.fromCharCode(65 + i)}</span>{x}</button>)}</article>}
+      <div className="focus-footer"><p>{step === 0 ? "Read at your own pace." : step === 1 ? "Retrieval practice strengthens memory." : "Choose the best answer."}</p><Button disabled={step === 2 && answer === null} onClick={() => step === 2 ? completeSession(answer === targetCorrectIdx ? 1 : 0, 1) : setStep(step + 1)} icon="arrow">{step === 2 ? "Finish session" : "Next"}</Button></div></>}
     </main>
   </div>;
 }
 
-type IngestedFile = { name: string; size: string; type: string };
+type IngestedFile = { name: string; size: string; type: string; rawFile?: File };
 type Attempt = {
   score: number;
   total: number;
@@ -309,22 +420,44 @@ type Attempt = {
   concepts: { name: string; correct: boolean }[];
 };
 
-function ContentIngestion({ online, done }: { online: boolean; done: (next?: "library" | "generation") => void }) {
+function ContentIngestion({
+  online,
+  done,
+  onPreparedMaterial,
+}: {
+  online: boolean;
+  done: (next?: "library" | "generation") => void;
+  onPreparedMaterial: (data: { topic: string; notes: string; files: File[] }) => void;
+}) {
   const [topic, setTopic] = useState("");
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<IngestedFile[]>([]);
   const [inputMethod, setInputMethod] = useState<"text" | "voice" | "camera" | "files">("text");
   const [stage, setStage] = useState<"add" | "ready">("add");
-  const hasContent = topic.trim().length >= 2 && (notes.trim().length >= 20 || files.length > 0);
+  const hasContent = topic.trim().length >= 2 && (notes.trim().length >= 5 || files.length > 0);
   const wordCount = notes.trim() ? notes.trim().split(/\s+/).length : 0;
   const chunkCount = Math.max(1, Math.ceil(wordCount / 350) + files.length);
+
   const addFiles = (list: FileList | null) => {
     if (!list) return;
-    setFiles(current => [...current, ...Array.from(list).map(file => ({
-      name: file.name,
-      size: file.size > 1048576 ? `${(file.size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`,
-      type: file.name.split(".").pop()?.toUpperCase() || "FILE",
-    }))].slice(0, 6));
+    setFiles(current => [
+      ...current,
+      ...Array.from(list).map(file => ({
+        name: file.name,
+        size: file.size > 1048576 ? `${(file.size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`,
+        type: file.name.split(".").pop()?.toUpperCase() || "FILE",
+        rawFile: file,
+      })),
+    ].slice(0, 6));
+  };
+
+  const handlePrepare = () => {
+    onPreparedMaterial({
+      topic: topic.trim(),
+      notes: notes.trim(),
+      files: files.map(f => f.rawFile).filter((f): f is File => Boolean(f)),
+    });
+    setStage("ready");
   };
 
   if (stage === "ready") return <div className="page ingestion-page">
@@ -333,7 +466,7 @@ function ContentIngestion({ online, done }: { online: boolean; done: (next?: "li
       <div className="complete-mark"><Icon name="check" size={30}/></div>
       <Badge>CONTENT READY</Badge>
       <h2>Your topic is ready.</h2>
-      <p>Your captured material is linked to “{topic}” and ready for the next prototype step. Audio, images, and documents were not parsed, and no AI resources were generated.</p>
+      <p>Your captured material is linked to “{topic}” and ready for AI learning resource generation.</p>
       <div className="ingest-results">
         <span><strong>1</strong><small>Topic added</small></span>
         <span><strong>{files.length + (notes.trim() ? 1 : 0)}</strong><small>Sources added</small></span>
@@ -344,16 +477,20 @@ function ContentIngestion({ online, done }: { online: boolean; done: (next?: "li
         <i/>
         <div><span><Icon name="check" size={15}/></span><p><strong>Topic linked</strong><small>{topic}</small></p></div>
         <i/>
-        <div><span><Icon name={online ? "wifi" : "offline"} size={15}/></span><p><strong>Generation is optional</strong><small>{online ? "A connected model would be needed next" : "Wait for a connection or configured local AI"}</small></p></div>
+        <div><span><Icon name={online ? "wifi" : "offline"} size={15}/></span><p><strong>Local AI status</strong><small>{online ? "AI generation active" : "Offline fallback will generate reviewer"}</small></p></div>
       </div>
-      <div className="success-actions"><Button onClick={() => done("generation")} icon="spark">Choose learning resources</Button><Button variant="secondary" onClick={() => done("library")} icon="book">Save without generating</Button><Button variant="ghost" onClick={() => { setStage("add"); setTopic(""); setNotes(""); setFiles([]); }} icon="plus">Add another</Button></div>
+      <div className="success-actions">
+        <Button onClick={() => done("generation")} icon="spark">Generate learning resources</Button>
+        <Button variant="secondary" onClick={() => done("library")} icon="book">Save without generating</Button>
+        <Button variant="ghost" onClick={() => { setStage("add"); setTopic(""); setNotes(""); setFiles([]); }} icon="plus">Add another</Button>
+      </div>
     </section>
   </div>;
 
   return <div className="page ingestion-page">
     <button className="back-link" onClick={() => done("library")}>← Learning Resources</button>
     <section className="ingest-head">
-      <div><Badge tone="blue">NEW LEARNING SET</Badge><h2>What would you like to learn?</h2><p>Name the topic, then add free text, record your voice, use your camera, or upload a file.</p></div>
+      <div><Badge tone="blue">NEW LEARNING SET</Badge><h2>What would you like to learn?</h2><p>Name the topic, then add free text, use your camera, or upload document/image files.</p></div>
       <div className="ingest-steps" aria-label="Ingestion progress">
         {["Topic & material", "Ready"].map((label, index) => <span className={index === 0 ? "active" : ""} key={label}><i>{index + 1}</i>{label}</span>)}
       </div>
@@ -361,7 +498,7 @@ function ContentIngestion({ online, done }: { online: boolean; done: (next?: "li
 
     <div className="ingestion-grid">
       <section className="panel ingest-source">
-        <label className="setup-field"><span>Topic</span><input value={topic} onChange={e => setTopic(e.target.value)} placeholder="For example: Cell division, budgeting, or Spanish basics"/></label>
+        <label className="setup-field"><span>Topic</span><input value={topic} onChange={e => setTopic(e.target.value)} placeholder="For example: Cell division, Photosynthesis, or Mechanics"/></label>
         <div className="source-tabs" role="tablist" aria-label="Choose how to add learning material">
           <button role="tab" aria-selected={inputMethod === "text"} className={inputMethod === "text" ? "active" : ""} onClick={() => setInputMethod("text")}><Icon name="edit"/> Text</button>
           <button role="tab" aria-selected={inputMethod === "voice"} className={inputMethod === "voice" ? "active" : ""} onClick={() => setInputMethod("voice")}><Icon name="mic"/> Voice</button>
@@ -369,49 +506,104 @@ function ContentIngestion({ online, done }: { online: boolean; done: (next?: "li
           <button role="tab" aria-selected={inputMethod === "files"} className={inputMethod === "files" ? "active" : ""} onClick={() => setInputMethod("files")}><Icon name="upload"/> Files</button>
         </div>
         {inputMethod === "text" && <div className="notes-input"><label htmlFor="material-notes">Free text</label><textarea id="material-notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder={"Paste notes, write an explanation, or add the information you want to study…\n\nTip: include enough detail for useful notes, flashcards, and questions."}/><span>{wordCount} words</span></div>}
-        {inputMethod === "voice" && <label className="drop-zone compact-drop-zone">
-          <input type="file" accept="audio/*" capture="user" onChange={e => { addFiles(e.target.files); e.currentTarget.value = ""; }}/>
+        {inputMethod === "voice" && <div className="drop-zone compact-drop-zone disabled-zone">
           <span className="drop-icon"><Icon name="mic" size={24}/></span>
-          <strong>Record a voice command</strong>
-          <p>Tell Lumi what you want to learn or explain what you already know.</p>
-          <small>Uses your device’s recorder when supported · microphone permission may be requested</small>
-        </label>}
+          <strong>Voice transcription currently disabled</strong>
+          <p>Voice STT is not enabled in this version. Please use the Text tab or upload notes via Files.</p>
+        </div>}
         {inputMethod === "camera" && <label className="drop-zone compact-drop-zone">
           <input type="file" accept="image/*" capture="environment" onChange={e => { addFiles(e.target.files); e.currentTarget.value = ""; }}/>
           <span className="drop-icon"><Icon name="image" size={24}/></span>
           <strong>Open your camera</strong>
-          <p>Take a photo of a page, diagram, object, or whiteboard.</p>
-          <small>Uses your device’s camera when supported · camera permission may be requested</small>
+          <p>Take a photo of a page, diagram, object, or whiteboard (parsed via OCR).</p>
+          <small>PNG, JPG, WEBP, BMP supported</small>
         </label>}
         {inputMethod === "files" && <label className="drop-zone compact-drop-zone">
-          <input type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,image/*,audio/*" onChange={e => { addFiles(e.target.files); e.currentTarget.value = ""; }}/>
+          <input type="file" multiple accept=".pdf,.doc,.docx,.txt,.md,.csv,.xlsx,image/*" onChange={e => { addFiles(e.target.files); e.currentTarget.value = ""; }}/>
           <span className="drop-icon"><Icon name="upload" size={24}/></span>
           <strong>Browse files</strong>
-          <p>PDF, DOCX, PPTX, TXT, Markdown, images, or audio</p>
-          <small>Up to 6 files · selected files can be removed before continuing</small>
+          <p>PDF, DOCX, TXT, Markdown, CSV, XLSX, or photos</p>
+          <small>Up to 6 files · 25 MB max total</small>
         </label>}
-        {files.length > 0 && <div className="file-queue">{files.map((file, index) => <div key={`${file.name}-${index}`}><span className="file-type">{file.type.slice(0, 4)}</span><p><strong>{file.name}</strong><small>{file.size} · Ready to add</small></p><button onClick={() => setFiles(files.filter((_, fileIndex) => fileIndex !== index))} aria-label={`Remove ${file.name}`}><Icon name="close" size={17}/></button></div>)}</div>}
-        <div className="format-note"><Icon name="file"/><p><strong>Prototype capture</strong><br/>Text is kept in this session. Audio, photos, and files can be selected and reviewed, but are not transcribed, analyzed, or uploaded to an AI service.</p></div>
+        {files.length > 0 && <div className="file-queue">{files.map((file, index) => <div key={`${file.name}-${index}`}><span className="file-type">{file.type.slice(0, 4)}</span><p><strong>{file.name}</strong><small>{file.size} · Ready to parse</small></p><button onClick={() => setFiles(files.filter((_, fileIndex) => fileIndex !== index))} aria-label={`Remove ${file.name}`}><Icon name="close" size={17}/></button></div>)}</div>}
+        <div className="format-note"><Icon name="file"/><p><strong>Live Document Ingestion</strong><br/>PDF, DOCX, TXT, Markdown, CSV, and image OCR are parsed directly by the backend.</p></div>
       </section>
-      <aside className="panel ingest-help"><div className="icon-tile"><Icon name="spark"/></div><p className="eyebrow">CHOOSE YOUR WAY</p><h3>Show or tell Lumi.</h3><div className="help-step"><span>1</span><p><strong>Name the topic</strong><small>Use any subject, skill, or idea you want to learn.</small></p></div><div className="help-step"><span>2</span><p><strong>Add learning material</strong><small>Type, speak, take a photo with your camera, or choose a saved file.</small></p></div><div className="availability"><Icon name={online ? "wifi" : "offline"}/><p><strong>{online ? "Online" : "Working offline"}</strong><br/>{online ? "Selected material can enter the prototype workflow." : "You can capture material now. New AI processing is unavailable."}</p></div></aside>
-      <div className="ingest-footer"><p>{hasContent ? "Your topic and learning material are ready." : "Add a topic, then type, record, capture, or upload learning material."}</p><Button disabled={!hasContent} onClick={() => setStage("ready")} icon="check">Prepare material</Button></div>
+      <aside className="panel ingest-help"><div className="icon-tile"><Icon name="spark"/></div><p className="eyebrow">CHOOSE YOUR WAY</p><h3>Show or tell Lumi.</h3><div className="help-step"><span>1</span><p><strong>Name the topic</strong><small>Use any subject, skill, or idea you want to learn.</small></p></div><div className="help-step"><span>2</span><p><strong>Add learning material</strong><small>Type notes, take a picture, or upload course documents.</small></p></div><div className="availability"><Icon name={online ? "wifi" : "offline"}/><p><strong>{online ? "AI Service Online" : "Local AI Fallback Ready"}</strong><br/>{online ? "Materials will be synthesized with your active local LLM." : "Deterministic study materials will be generated offline."}</p></div></aside>
+      <div className="ingest-footer"><p>{hasContent ? "Your topic and learning material are ready." : "Add a topic, then type notes or upload learning material."}</p><Button disabled={!hasContent} onClick={handlePrepare} icon="check">Prepare material</Button></div>
     </div>
   </div>;
 }
 
-function Generation({ online, finish, back }: { online: boolean; finish: () => void; back: () => void }) {
+function Generation({
+  online,
+  preparedMaterial,
+  onboardingId,
+  finish,
+  back,
+  onResourceGenerated,
+}: {
+  online: boolean;
+  preparedMaterial: { topic: string; notes: string; files: File[] } | null;
+  onboardingId?: number;
+  finish: () => void;
+  back: () => void;
+  onResourceGenerated: (result: GeneratedLearningResource) => void;
+}) {
   const [selected, setSelected] = useState(["notes", "cards", "quiz"]);
-  const [prepared, setPrepared] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState("");
+  const [generatedResult, setGeneratedResult] = useState<GeneratedLearningResource | null>(null);
+
   const resources = [
-    { id: "notes", icon: "book" as IconName, title: "Key notes", copy: "Important concepts, definitions, and takeaways" },
-    { id: "cards", icon: "cards" as IconName, title: "Flashcards", copy: "Short question-and-answer recall cards" },
+    { id: "notes", icon: "book" as IconName, title: "Key notes & summary", copy: "Important concepts, definitions, and takeaways" },
+    { id: "cards", icon: "cards" as IconName, title: "Flashcards", copy: "Question-and-answer recall cards" },
     { id: "quiz", icon: "quiz" as IconName, title: "Quiz & reviewer", copy: "Practice questions with explanations" },
   ];
+
   const toggle = (id: string) => setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+
+  const handleGenerate = async () => {
+    if (!preparedMaterial || !onboardingId) {
+      setGenerationError("Missing topic, notes, or learner profile.");
+      return;
+    }
+    setGenerating(true);
+    setGenerationError("");
+
+    try {
+      const typeMap: Record<string, string[]> = {
+        notes: ["summary", "reviewer"],
+        cards: ["flashcards"],
+        quiz: ["practice_quiz", "mock_exam"],
+      };
+      const requestedTypes = selected.flatMap(s => typeMap[s] || []);
+
+      const result = await api.generateLearningResource({
+        onboarding_id: onboardingId,
+        topic: preparedMaterial.topic,
+        notes: preparedMaterial.notes,
+        resource_types: requestedTypes.length > 0 ? requestedTypes : undefined,
+        files: preparedMaterial.files,
+      });
+
+      setGeneratedResult(result);
+      onResourceGenerated(result);
+    } catch (err: any) {
+      console.error("Generation error:", err);
+      setGenerationError(err?.message || "Failed to generate learning resources.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return <div className="page workflow-page">
     <button className="back-link" onClick={back}>← Back to imported material</button>
     <section className="workflow-hero">
-      <div><Badge tone="peach">PROTOTYPE GENERATION</Badge><h2>What should Lumi prepare?</h2><p>Select the resources you want. This prototype uses clearly labeled sample content; no local or cloud AI model is connected.</p></div>
+      <div>
+        <Badge tone="peach">LOCAL AI GENERATION</Badge>
+        <h2>What should Lumi prepare?</h2>
+        <p>Grounded strictly in “{preparedMaterial?.topic || 'your topic'}”. Generated locally on your machine.</p>
+      </div>
       <Lumi size="medium"/>
     </section>
     <div className="generation-layout">
@@ -420,84 +612,204 @@ function Generation({ online, finish, back }: { online: boolean; finish: () => v
         <div className="resource-select-list">{resources.map(resource => <button key={resource.id} className={selected.includes(resource.id) ? "selected" : ""} onClick={() => toggle(resource.id)} aria-pressed={selected.includes(resource.id)}>
           <span><Icon name={resource.icon}/></span><span><strong>{resource.title}</strong><small>{resource.copy}</small></span><i>{selected.includes(resource.id) && <Icon name="check" size={15}/>}</i>
         </button>)}</div>
-        {!online && <div className="status-callout warning"><Icon name="offline"/><p><strong>New generation is unavailable offline.</strong><br/>Reconnect or configure a genuine local model. Saved resources remain available.</p></div>}
-        {prepared && <div className="generation-progress" aria-live="polite">{resources.filter(item => selected.includes(item.id)).map(item => <div key={item.id}><span><Icon name="check" size={15}/></span><p><strong>{item.title}</strong><small>Sample resource prepared from the Cell division demo source</small></p><Badge>Ready</Badge></div>)}</div>}
+
+        {generationError && (
+          <div className="status-callout warning" style={{ borderColor: "#ef4444" }}>
+            <Icon name="close"/>
+            <p><strong>Generation failed:</strong><br/>{generationError}</p>
+          </div>
+        )}
+
+        {generatedResult && (
+          <div className="generation-progress" aria-live="polite">
+            <div>
+              <span><Icon name="check" size={15}/></span>
+              <p>
+                <strong>{generatedResult.resource.title}</strong>
+                <small>Generated in {generatedResult.generation.execution_time_seconds.toFixed(1)}s using {generatedResult.generation.model_used || "offline engine"}</small>
+              </p>
+              <Badge tone="sage">Ready</Badge>
+            </div>
+            {generatedResult.generation.warnings.map((w, i) => (
+              <p key={i} className="muted" style={{ fontSize: "0.85rem", marginTop: "4px" }}>• {w}</p>
+            ))}
+          </div>
+        )}
+
         <div className="generation-actions">
-          {!prepared ? <Button disabled={!online || selected.length === 0} onClick={() => setPrepared(true)} icon="spark">Prepare sample resources</Button> : <Button onClick={finish} icon="arrow">Open learning set</Button>}
+          {!generatedResult ? (
+            <Button disabled={generating || selected.length === 0} onClick={handleGenerate} icon="spark">
+              {generating ? "Generating study materials…" : "Generate learning resources"}
+            </Button>
+          ) : (
+            <Button onClick={finish} icon="arrow">Open learning set</Button>
+          )}
         </div>
       </section>
-      <aside className="panel source-proof"><p className="eyebrow">SOURCE BOUNDARY</p><h3>Grounded in your material</h3><p>The demo resources are tied to the built-in Cell division lesson and are labeled as samples. Uploaded files are not parsed in this prototype.</p><div><Icon name="file"/><span><strong>Biology lesson notes</strong><small>Cell division & mitosis · demo source</small></span></div><div><Icon name="offline"/><span><strong>Offline after saving</strong><small>Prepared samples stay available in this browser session</small></span></div></aside>
+      <aside className="panel source-proof">
+        <p className="eyebrow">SOURCE BOUNDARY</p>
+        <h3>Grounded in your material</h3>
+        <p>The materials will be created solely from your uploaded documents and notes.</p>
+        <div><Icon name="file"/><span><strong>{preparedMaterial?.topic || "Topic"}</strong><small>{preparedMaterial?.files.length || 0} file(s), {preparedMaterial?.notes ? "with typed notes" : "no typed notes"}</small></span></div>
+        <div><Icon name={online ? "wifi" : "offline"}/><span><strong>{online ? "Ollama Online" : "Offline Fallback"}</strong><small>Saved resources stay cached locally</small></span></div>
+      </aside>
     </div>
   </div>;
 }
 
-function ResourceLibrary({ go, create }: { go: (page: Page) => void; create: () => void }) {
+function ResourceLibrary({
+  go,
+  create,
+  activeResource,
+  activeVersion,
+}: {
+  go: (page: Page) => void;
+  create: () => void;
+  activeResource?: LearningResourceRead | null;
+  activeVersion?: LearningResourceVersionRead | null;
+}) {
   const [filter, setFilter] = useState<"all" | "notes" | "cards" | "quiz">("all");
   const actions = [
-    { id: "notes", label: "Key notes", icon: "book" as IconName, page: "notes" as Page, meta: "4 sections" },
-    { id: "cards", label: "Flashcards", icon: "cards" as IconName, page: "flashcards" as Page, meta: "6 cards" },
-    { id: "quiz", label: "Quiz & reviewer", icon: "quiz" as IconName, page: "quiz" as Page, meta: "3 questions" },
+    { id: "notes", label: "Key notes & summary", icon: "book" as IconName, page: "notes" as Page, meta: "Reviewer & notes" },
+    { id: "cards", label: "Flashcards", icon: "cards" as IconName, page: "flashcards" as Page, meta: "Recall cards" },
+    { id: "quiz", label: "Quiz & reviewer", icon: "quiz" as IconName, page: "quiz" as Page, meta: "Practice questions" },
   ];
+
+  const title = activeResource?.title || "Cell division & mitosis";
+  const sourceLabel = activeResource?.source_label || "Biology lesson notes";
+  const versionNum = activeVersion?.version_number || 1;
+
   return <div className="page library-page">
     <section className="workflow-hero"><div><Badge tone="blue">LEARNING RESOURCES</Badge><h2>Everything you need, in one learning set.</h2><p>Open saved material, continue studying, or create a new set from your own notes and files.</p></div><Button onClick={create} icon="plus">Create learning set</Button></section>
     <div className="library-tabs" role="tablist" aria-label="Filter learning resources">{[["all", "All resources"], ["notes", "Notes"], ["cards", "Flashcards"], ["quiz", "Quizzes"]].map(([id, label]) => <button role="tab" aria-selected={filter === id} className={filter === id ? "active" : ""} onClick={() => setFilter(id as typeof filter)} key={id}>{label}</button>)}</div>
     <section className="panel learning-set">
-      <div className="learning-set-head"><div className="set-art"><Icon name="book" size={28}/></div><div><span><Badge>Biology</Badge><Badge tone="neutral">Available offline</Badge></span><h3>Cell division & mitosis</h3><p>Source: Biology lesson notes · Updated today · Version 1</p></div><Button onClick={() => go("focus")} icon="play">Start studying</Button></div>
-      <div className="set-progress"><span><strong>Learning progress</strong><small>No completed quiz yet</small></span><div><i/></div><button onClick={() => go("knowledge")}>View knowledge map <Icon name="arrow" size={15}/></button></div>
-      <div className="resource-action-grid">{actions.filter(item => filter === "all" || filter === item.id).map(item => <button key={item.id} onClick={() => go(item.page)}><span><Icon name={item.icon}/></span><span><strong>{item.label}</strong><small>{item.meta} · demo source</small></span><Icon name="chevron"/></button>)}</div>
-      <div className="version-row"><span><Icon name="layers"/><strong>Version 1</strong><small>Original sample set · no adaptive updates yet</small></span><button onClick={() => go("recommendations")}>Check recommendations</button></div>
+      <div className="learning-set-head">
+        <div className="set-art"><Icon name="book" size={28}/></div>
+        <div>
+          <span><Badge tone="sage">{activeResource?.subject || "Subject"}</Badge><Badge tone="neutral">Saved</Badge></span>
+          <h3>{title}</h3>
+          <p>Source: {sourceLabel} · Version {versionNum}</p>
+        </div>
+        <Button onClick={() => go("focus")} icon="play">Start studying</Button>
+      </div>
+      <div className="set-progress"><span><strong>Learning progress</strong><small>Ready to study</small></span><div><i style={{ width: "60%" }}/></div><button onClick={() => go("knowledge")}>View knowledge map <Icon name="arrow" size={15}/></button></div>
+      <div className="resource-action-grid">{actions.filter(item => filter === "all" || filter === item.id).map(item => <button key={item.id} onClick={() => go(item.page)}><span><Icon name={item.icon}/></span><span><strong>{item.label}</strong><small>{item.meta}</small></span><Icon name="chevron"/></button>)}</div>
+      <div className="version-row"><span><Icon name="layers"/><strong>Version {versionNum}</strong><small>{activeVersion?.title || "Original learning set"}</small></span><button onClick={() => go("recommendations")}>Check recommendations</button></div>
     </section>
     <section className="library-empty panel"><div><Icon name="plus"/></div><span><strong>Create another learning set</strong><small>Import notes, PDFs, text files, or paste text manually.</small></span><Button variant="secondary" onClick={create} icon="upload">Add material</Button></section>
   </div>;
 }
 
-function NotesViewer({ back, start }: { back: () => void; start: () => void }) {
+function NotesViewer({
+  back,
+  start,
+  materials,
+}: {
+  back: () => void;
+  start: () => void;
+  materials?: Partial<StudyMaterialsResponse> | null;
+}) {
+  const mapped = mapNotesFromMaterials(materials);
+
   return <div className="page viewer-page"><button className="back-link" onClick={back}>← Learning Resources</button>
-    <div className="viewer-layout"><article className="panel note-document"><div className="document-head"><div><Badge>DEMO KEY NOTES · VERSION 1</Badge><h2>Cell division & mitosis</h2><p>Referenced source: Biology lesson notes</p></div><Badge tone="neutral">Available offline</Badge></div>
-      <div className="key-takeaway"><Icon name="spark"/><p><strong>Key takeaway</strong><br/>Cell division supports growth, repair, and reproduction. Mitosis produces two genetically identical daughter cells.</p></div>
-      <h3>Before division</h3><p>During interphase, a cell grows, performs its normal functions, and copies its DNA so each new cell can receive a complete set.</p>
-      <h3>The four phases of mitosis</h3><ol><li><strong>Prophase:</strong> Chromosomes condense and become visible.</li><li><strong>Metaphase:</strong> Chromosomes line up at the cell equator.</li><li><strong>Anaphase:</strong> Sister chromatids move to opposite poles.</li><li><strong>Telophase:</strong> New nuclei form around each chromosome set.</li></ol>
-      <h3>Cytokinesis</h3><p>The cytoplasm divides, completing the formation of two daughter cells.</p>
-    </article><aside className="stack"><section className="panel viewer-side"><p className="eyebrow">CONTINUE LEARNING</p><h3>Ready to recall this?</h3><p>Use the same source material in a focused study session.</p><Button onClick={start} icon="play" className="full-button">Start study mode</Button></section><section className="panel source-proof compact"><p className="eyebrow">SOURCE</p><div><Icon name="file"/><span><strong>Biology lesson notes</strong><small>Built-in demo content</small></span></div></section></aside></div>
+    <div className="viewer-layout"><article className="panel note-document"><div className="document-head"><div><Badge tone="blue">NOTES & REVIEWER</Badge><h2>{mapped.title}</h2><p>{materials?.topic ? `Topic: ${materials.topic}` : "Course Notes"}</p></div><Badge tone="neutral">Saved</Badge></div>
+      {mapped.summary && (
+        <div className="key-takeaway"><Icon name="spark"/><p><strong>Summary</strong><br/>{mapped.summary}</p></div>
+      )}
+      {mapped.sections.length > 0 ? (
+        mapped.sections.map((section, idx) => (
+          <div key={idx} style={{ marginTop: "1rem" }}>
+            <h3>{section.title}</h3>
+            <p style={{ whiteSpace: "pre-line" }}>{section.content}</p>
+            {section.keyPoints && section.keyPoints.length > 0 && (
+              <ul>
+                {section.keyPoints.map((pt, pIdx) => <li key={pIdx}><strong>{pt}</strong></li>)}
+              </ul>
+            )}
+          </div>
+        ))
+      ) : (
+        <>
+          <div className="key-takeaway"><Icon name="spark"/><p><strong>Key takeaway</strong><br/>Cell division supports growth, repair, and reproduction. Mitosis produces two genetically identical daughter cells.</p></div>
+          <h3>Before division</h3><p>During interphase, a cell grows, performs its normal functions, and copies its DNA so each new cell can receive a complete set.</p>
+          <h3>The four phases of mitosis</h3><ol><li><strong>Prophase:</strong> Chromosomes condense and become visible.</li><li><strong>Metaphase:</strong> Chromosomes line up at the cell equator.</li><li><strong>Anaphase:</strong> Sister chromatids move to opposite poles.</li><li><strong>Telophase:</strong> New nuclei form around each chromosome set.</li></ol>
+          <h3>Cytokinesis</h3><p>The cytoplasm divides, completing the formation of two daughter cells.</p>
+        </>
+      )}
+    </article><aside className="stack"><section className="panel viewer-side"><p className="eyebrow">CONTINUE LEARNING</p><h3>Ready to recall this?</h3><p>Use this material in a focused study session.</p><Button onClick={start} icon="play" className="full-button">Start study mode</Button></section><section className="panel source-proof compact"><p className="eyebrow">SOURCE</p><div><Icon name="file"/><span><strong>{materials?.topic || "Study notes"}</strong><small>Structured study reviewer</small></span></div></section></aside></div>
   </div>;
 }
 
-const demoCards = [
+const defaultDemoCards: [string, string][] = [
   ["What happens during interphase?", "The cell grows and copies its DNA before division."],
   ["Where do chromosomes line up during metaphase?", "At the cell’s equator."],
   ["What does mitosis produce?", "Two genetically identical daughter cells."],
 ];
 
-function FlashcardsViewer({ back, takeQuiz }: { back: () => void; takeQuiz: () => void }) {
-  const [index, setIndex] = useState(0);
-  const [flipped, setFlipped] = useState(false);
-  const [ratings, setRatings] = useState<Record<number, "understood" | "practice">>({});
-  const move = (next: number) => { setIndex(next); setFlipped(false); };
-  return <div className="page cards-page"><button className="back-link" onClick={back}>← Learning Resources</button><div className="cards-header"><div><Badge tone="blue">DEMO FLASHCARDS</Badge><h2>Cell division & mitosis</h2><p>Card {index + 1} of {demoCards.length} · saved offline</p></div><div className="card-count">{Object.keys(ratings).length}/{demoCards.length}<small>reviewed</small></div></div>
-    <button className={`study-flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)} aria-label={flipped ? "Showing answer. Activate to show question." : "Showing question. Activate to reveal answer."}><span className="eyebrow">{flipped ? "ANSWER" : "QUESTION"}</span><strong>{demoCards[index][flipped ? 1 : 0]}</strong><small>{flipped ? "Tap to see the question" : "Tap to reveal the answer"}</small></button>
-    <div className="rating-row"><button className={ratings[index] === "practice" ? "selected" : ""} onClick={() => setRatings({ ...ratings, [index]: "practice" })}>Needs more practice</button><button className={ratings[index] === "understood" ? "selected" : ""} onClick={() => setRatings({ ...ratings, [index]: "understood" })}>I understand this</button></div>
-    <div className="deck-nav"><Button variant="secondary" disabled={index === 0} onClick={() => move(index - 1)}>Previous</Button>{index < demoCards.length - 1 ? <Button onClick={() => move(index + 1)} icon="arrow">Next card</Button> : <Button onClick={takeQuiz} icon="quiz">Take the quiz</Button>}</div>
-  </div>;
-}
-
-const quizQuestions = [
+const defaultQuizQuestions = [
   { question: "What is the main result of mitosis?", options: ["Four different cells", "Two genetically identical cells", "One larger cell"], answer: 1, concept: "Purpose of mitosis", explanation: "Mitosis produces two daughter cells with the same genetic information." },
   { question: "During which phase do chromosomes line up at the cell equator?", options: ["Prophase", "Metaphase", "Telophase"], answer: 1, concept: "Mitosis phases", explanation: "Meta means middle: chromosomes align across the middle during metaphase." },
   { question: "What happens before mitosis during interphase?", options: ["DNA is copied", "The cytoplasm splits", "Chromatids move apart"], answer: 0, concept: "Interphase", explanation: "The cell grows and duplicates its DNA during interphase." },
 ];
 
-function QuizViewer({ back, submit }: { back: () => void; submit: (attempt: Attempt) => void }) {
+function FlashcardsViewer({
+  back,
+  takeQuiz,
+  materials,
+}: {
+  back: () => void;
+  takeQuiz: () => void;
+  materials?: Partial<StudyMaterialsResponse> | null;
+}) {
+  const dynamicCards = mapFlashcardsFromMaterials(materials);
+  const cards: [string, string][] = dynamicCards.length > 0 ? dynamicCards : defaultDemoCards;
+
+  const [index, setIndex] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [ratings, setRatings] = useState<Record<number, "understood" | "practice">>({});
+  const move = (next: number) => { setIndex(next); setFlipped(false); };
+
+  return <div className="page cards-page"><button className="back-link" onClick={back}>← Learning Resources</button><div className="cards-header"><div><Badge tone="blue">FLASHCARDS</Badge><h2>{materials?.topic || "Cell division & mitosis"}</h2><p>Card {index + 1} of {cards.length} · saved</p></div><div className="card-count">{Object.keys(ratings).length}/{cards.length}<small>reviewed</small></div></div>
+    <button className={`study-flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)} aria-label={flipped ? "Showing answer. Activate to show question." : "Showing question. Activate to reveal answer."}><span className="eyebrow">{flipped ? "ANSWER" : "QUESTION"}</span><strong>{cards[index][flipped ? 1 : 0]}</strong><small>{flipped ? "Tap to see the question" : "Tap to reveal the answer"}</small></button>
+    <div className="rating-row"><button className={ratings[index] === "practice" ? "selected" : ""} onClick={() => setRatings({ ...ratings, [index]: "practice" })}>Needs more practice</button><button className={ratings[index] === "understood" ? "selected" : ""} onClick={() => setRatings({ ...ratings, [index]: "understood" })}>I understand this</button></div>
+    <div className="deck-nav"><Button variant="secondary" disabled={index === 0} onClick={() => move(index - 1)}>Previous</Button>{index < cards.length - 1 ? <Button onClick={() => move(index + 1)} icon="arrow">Next card</Button> : <Button onClick={takeQuiz} icon="quiz">Take the quiz</Button>}</div>
+  </div>;
+}
+
+function QuizViewer({
+  back,
+  submit,
+  materials,
+}: {
+  back: () => void;
+  submit: (attempt: Attempt) => void;
+  materials?: Partial<StudyMaterialsResponse> | null;
+}) {
+  const mappedQuestions = mapQuizQuestionsFromMaterials(materials);
+  const questions = mappedQuestions.length > 0 ? mappedQuestions : defaultQuizQuestions;
+
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
-  const current = quizQuestions[index];
+  const current = questions[index];
   const selected = answers[index];
+
   const finish = () => {
-    const concepts = quizQuestions.map((question, questionIndex) => ({ name: question.concept, correct: answers[questionIndex] === question.answer }));
-    submit({ score: concepts.filter(item => item.correct).length, total: quizQuestions.length, completedAt: new Date().toISOString(), source: "quiz", concepts });
+    const concepts = questions.map((question: { concept: string }, questionIndex: number) => ({
+      name: question.concept,
+      correct: answers[questionIndex] === (questions[questionIndex] as any).answer,
+    }));
+    submit({
+      score: concepts.filter((item: { correct: boolean }) => item.correct).length,
+      total: questions.length,
+      completedAt: new Date().toISOString(),
+      source: "quiz",
+      concepts,
+    });
   };
-  return <div className="page quiz-page"><button className="back-link" onClick={back}>← Learning Resources</button><section className="quiz-shell panel"><div className="quiz-progress"><span><strong>Cell division quiz</strong><small>Question {index + 1} of {quizQuestions.length}</small></span><div><i style={{ width: `${((index + 1) / quizQuestions.length) * 100}%` }}/></div></div><Badge tone="peach">DEMO QUIZ · SAVES LOCALLY</Badge><h2>{current.question}</h2><div className="quiz-options">{current.options.map((option, optionIndex) => <button className={selected === optionIndex ? "selected" : ""} aria-pressed={selected === optionIndex} onClick={() => setAnswers({ ...answers, [index]: optionIndex })} key={option}><span>{String.fromCharCode(65 + optionIndex)}</span>{option}</button>)}</div>
+
+  return <div className="page quiz-page"><button className="back-link" onClick={back}>← Learning Resources</button><section className="quiz-shell panel"><div className="quiz-progress"><span><strong>{materials?.topic || "Practice Quiz"}</strong><small>Question {index + 1} of {questions.length}</small></span><div><i style={{ width: `${((index + 1) / questions.length) * 100}%` }}/></div></div><Badge tone="peach">PRACTICE QUIZ</Badge><h2>{current.question}</h2><div className="quiz-options">{current.options.map((option: string, optionIndex: number) => <button className={selected === optionIndex ? "selected" : ""} aria-pressed={selected === optionIndex} onClick={() => setAnswers({ ...answers, [index]: optionIndex })} key={option}><span>{String.fromCharCode(65 + optionIndex)}</span>{option}</button>)}</div>
       {selected !== undefined && <div className={`answer-feedback ${selected === current.answer ? "correct" : "incorrect"}`} aria-live="polite"><Icon name={selected === current.answer ? "check" : "spark"}/><p><strong>{selected === current.answer ? "That’s right." : "No worries—this is useful evidence."}</strong><br/>{current.explanation}</p></div>}
-      <div className="quiz-footer"><Button variant="secondary" disabled={index === 0} onClick={() => setIndex(index - 1)}>Previous</Button>{index < quizQuestions.length - 1 ? <Button disabled={selected === undefined} onClick={() => setIndex(index + 1)} icon="arrow">Next question</Button> : <Button disabled={selected === undefined} onClick={finish} icon="check">Submit quiz</Button>}</div></section>
+      <div className="quiz-footer"><Button variant="secondary" disabled={index === 0} onClick={() => setIndex(index - 1)}>Previous</Button>{index < questions.length - 1 ? <Button disabled={selected === undefined} onClick={() => setIndex(index + 1)} icon="arrow">Next question</Button> : <Button disabled={selected === undefined} onClick={finish} icon="check">Submit quiz</Button>}</div></section>
   </div>;
 }
 
@@ -506,19 +818,59 @@ function SessionCompletion({ attempt, go }: { attempt: Attempt; go: (page: Page)
   return <div className="page completion-page"><section className="completion-card panel"><div className="completion-lumi"><Lumi size="medium"/></div><Badge>SESSION COMPLETED</Badge><h2>{percentage === 100 ? "Wonderful focus—you understood every check." : "Nice progress. Every answer gives us a clearer next step."}</h2><p>Lumi saved this result locally and used only your submitted answers to update the knowledge map.</p><div className="summary-stats"><span><strong>{attempt.score}/{attempt.total}</strong><small>Correct answers</small></span><span><strong>{attempt.concepts.filter(item => !item.correct).length}</strong><small>Topics to revisit</small></span><span><strong>Saved</strong><small>On this device</small></span></div><div className="recalc-state"><span><Icon name="check"/></span><p><strong>Knowledge map updated</strong><small>Recommendations now reflect this session’s evidence.</small></p></div><div className="completion-actions"><Button onClick={() => go("knowledge")} icon="layers">View knowledge map</Button><Button variant="secondary" onClick={() => go("recommendations")} icon="spark">See next steps</Button></div></section></div>;
 }
 
-function KnowledgeMap({ attempt, recommendations }: { attempt: Attempt | null; recommendations: () => void }) {
-  const topics = Array.from(new Set([...(attempt?.concepts.map(item => item.name) || []), "Purpose of mitosis", "Mitosis phases", "Interphase", "Cytokinesis"]));
-  return <div className="page knowledge-page"><section className="workflow-hero"><div><Badge tone="blue">KNOWLEDGE MAP</Badge><h2>See what the evidence supports.</h2><p>Topic states come from completed answers—not guesses about your ability.</p></div>{attempt && <Button onClick={recommendations} icon="spark">Knowledge Analysis</Button>}</section>
-    {!attempt ? <section className="empty-evidence panel"><div><Icon name="layers" size={28}/></div><h3>No assessed topics yet</h3><p>Complete a quiz or focused study session to begin your knowledge map. Lumi won’t invent mastery scores without evidence.</p></section> :
-    <div className="knowledge-layout"><section className="panel map-card"><div className="map-legend"><span><i className="strong"/>Strong understanding</span><span><i className="developing"/>Developing</span><span><i className="practice"/>Needs practice</span><span><i className="unassessed"/>Not assessed</span></div><div className="topic-map">{topics.map(topic => { const result = attempt.concepts.find(item => item.name === topic); const state = result ? result.correct ? "strong" : "practice" : "unassessed"; return <div className={`topic-state ${state}`} key={topic}><span><Icon name={result?.correct ? "check" : result ? "spark" : "more"}/></span><p><strong>{topic}</strong><small>{state === "strong" ? "Correct in your latest quiz" : state === "practice" ? "Incorrect in your latest quiz" : "No submitted answer yet"}</small></p><Badge tone={state === "strong" ? "sage" : state === "practice" ? "peach" : "neutral"}>{state === "strong" ? "Strong" : state === "practice" ? "Needs practice" : "Not assessed"}</Badge></div>})}</div></section><aside className="panel evidence-panel"><p className="eyebrow">LATEST EVIDENCE</p><h3>{attempt.score} of {attempt.total} correct</h3><p>{new Date(attempt.completedAt).toLocaleDateString()} · {attempt.source === "quiz" ? "Quiz" : "Study session"}</p><hr/><strong>How this works</strong><p>Correct answers support “strong” for this attempt. Incorrect answers flag practice. More sessions are needed before claiming lasting mastery.</p></aside></div>}
+function KnowledgeMap({
+  attempt,
+  recommendations,
+  knowledgeItems,
+}: {
+  attempt: Attempt | null;
+  recommendations: () => void;
+  knowledgeItems?: KnowledgeMapItem[];
+}) {
+  const hasItems = (knowledgeItems && knowledgeItems.length > 0) || Boolean(attempt);
+
+  return <div className="page knowledge-page"><section className="workflow-hero"><div><Badge tone="blue">KNOWLEDGE MAP</Badge><h2>See what the evidence supports.</h2><p>Topic states come from completed answers—not guesses about your ability.</p></div>{hasItems && <Button onClick={recommendations} icon="spark">Knowledge Analysis</Button>}</section>
+    {!hasItems ? <section className="empty-evidence panel"><div><Icon name="layers" size={28}/></div><h3>No assessed topics yet</h3><p>Complete a quiz or focused study session to begin your knowledge map. Lumi won’t invent mastery scores without evidence.</p></section> :
+    <div className="knowledge-layout"><section className="panel map-card"><div className="map-legend"><span><i className="strong"/>Strong understanding</span><span><i className="developing"/>Developing</span><span><i className="practice"/>Needs practice</span><span><i className="unassessed"/>Not assessed</span></div><div className="topic-map">
+      {knowledgeItems && knowledgeItems.length > 0 ? (
+        knowledgeItems.map(item => (
+          <div className={`topic-state ${item.state}`} key={item.concept_name}>
+            <span><Icon name={item.state === "strong" ? "check" : item.state === "needs_practice" ? "spark" : "more"}/></span>
+            <p><strong>{item.concept_name}</strong><small>{item.accuracy.toFixed(0)}% accuracy ({item.answers} answer{item.answers === 1 ? "" : "s"})</small></p>
+            <Badge tone={item.state === "strong" ? "sage" : item.state === "needs_practice" ? "peach" : "neutral"}>
+              {item.state === "strong" ? "Strong" : item.state === "needs_practice" ? "Needs practice" : "Developing"}
+            </Badge>
+          </div>
+        ))
+      ) : (
+        ["Purpose of mitosis", "Mitosis phases", "Interphase", "Cytokinesis"].map(topic => {
+          const result = attempt?.concepts.find(item => item.name === topic);
+          const state = result ? result.correct ? "strong" : "practice" : "unassessed";
+          return <div className={`topic-state ${state}`} key={topic}><span><Icon name={result?.correct ? "check" : result ? "spark" : "more"}/></span><p><strong>{topic}</strong><small>{state === "strong" ? "Correct in your latest quiz" : state === "practice" ? "Incorrect in your latest quiz" : "No submitted answer yet"}</small></p><Badge tone={state === "strong" ? "sage" : state === "practice" ? "peach" : "neutral"}>{state === "strong" ? "Strong" : state === "practice" ? "Needs practice" : "Not assessed"}</Badge></div>;
+        })
+      )}
+    </div></section><aside className="panel evidence-panel"><p className="eyebrow">LATEST EVIDENCE</p><h3>{attempt ? `${attempt.score} of ${attempt.total} correct` : `${knowledgeItems?.length || 0} topics tracked`}</h3><p>{attempt ? new Date(attempt.completedAt).toLocaleDateString() : "Saved sessions"} · {attempt?.source === "quiz" ? "Quiz" : "Study session"}</p><hr/><strong>How this works</strong><p>Accuracy ≥80% is marked Strong; ≥50% Developing; otherwise Needs Practice. Recommendations update automatically from session answers.</p></aside></div>}
   </div>;
 }
 
-function Recommendations({ attempt, start, library }: { attempt: Attempt | null; start: () => void; library: () => void }) {
-  const gaps = attempt?.concepts.filter(item => !item.correct) || [];
+function Recommendations({
+  attempt,
+  start,
+  library,
+  knowledgeItems,
+}: {
+  attempt: Attempt | null;
+  start: () => void;
+  library: () => void;
+  knowledgeItems?: KnowledgeMapItem[];
+}) {
+  const backendGaps = (knowledgeItems || []).filter(item => item.state === "needs_practice");
+  const localGaps = attempt?.concepts.filter(item => !item.correct).map(c => ({ concept_name: c.name })) || [];
+  const gaps = backendGaps.length > 0 ? backendGaps : localGaps;
+
   return <div className="page recommendation-page"><button className="back-link" onClick={library}>← Learning Resources</button><section className="workflow-hero"><div><Badge tone="peach">ADAPTIVE PRACTICE</Badge><h2>{gaps.length ? "Let’s strengthen the parts that need another look." : "Your next step will appear here."}</h2><p>Recommendations use your latest submitted answers and preserve the original resource version.</p></div><Lumi size="medium"/></section>
-    {!attempt ? <section className="empty-evidence panel"><div><Icon name="spark"/></div><h3>Complete one activity first</h3><p>Once Lumi has real answer evidence, targeted notes, cards, and practice will appear here.</p><Button onClick={start} icon="play">Start study mode</Button></section> :
-    <div className="recommendation-grid">{gaps.length ? gaps.map((gap, index) => <section className="panel recommendation-card" key={gap.name}><span className="recommendation-icon"><Icon name={index % 2 ? "cards" : "quiz"}/></span><Badge tone="peach">BASED ON LATEST QUIZ</Badge><h3>Review {gap.name.toLowerCase()}</h3><p>You missed the question connected to this concept. Try a short explanation, then answer a similar check.</p><div className="version-note"><Icon name="layers"/><span><strong>Suggested update · Version 2</strong><small>Version 1 remains available</small></span></div><Button onClick={start} icon="play" className="full-button">Start targeted practice</Button></section>) : <section className="panel recommendation-card"><span className="recommendation-icon"><Icon name="check"/></span><Badge>NO GAPS IN LATEST QUIZ</Badge><h3>Revisit later for spaced practice</h3><p>Your latest answers were correct. Lumi will not invent a weakness; review again later to strengthen retention.</p><Button onClick={library} variant="secondary">Back to resources</Button></section>}</div>}
+    {gaps.length === 0 && !attempt && (!knowledgeItems || knowledgeItems.length === 0) ? <section className="empty-evidence panel"><div><Icon name="spark"/></div><h3>Complete one activity first</h3><p>Once Lumi has real answer evidence, targeted notes, cards, and practice will appear here.</p><Button onClick={start} icon="play">Start study mode</Button></section> :
+    <div className="recommendation-grid">{gaps.length ? gaps.map((gap, index) => <section className="panel recommendation-card" key={gap.concept_name}><span className="recommendation-icon"><Icon name={index % 2 ? "cards" : "quiz"}/></span><Badge tone="peach">PRIORITY TOPIC</Badge><h3>Review {gap.concept_name.toLowerCase()}</h3><p>This concept is currently flagged for practice. Review key notes and recall cards before retrying the quiz.</p><div className="version-note"><Icon name="layers"/><span><strong>Adaptive Study Focus</strong><small>Original resources preserved</small></span></div><Button onClick={start} icon="play" className="full-button">Start targeted practice</Button></section>) : <section className="panel recommendation-card"><span className="recommendation-icon"><Icon name="check"/></span><Badge>NO GAPS FOUND</Badge><h3>Revisit later for spaced practice</h3><p>Your recorded answers are currently strong across all tracked concepts. Review again later to reinforce retention.</p><Button onClick={library} variant="secondary">Back to resources</Button></section>}</div>}
   </div>;
 }
 
@@ -614,6 +966,7 @@ function Coach({ back }: { back: () => void }) {
 
 const defaultProfile: ProfileData = {
   name: "Amara Mensah",
+  age: 18,
   level: "Senior high school",
   subjects: ["Mathematics", "Biology", "History"],
   examDate: "",
@@ -636,6 +989,8 @@ function readSavedProfile() {
     return {
       ...defaultProfile,
       ...parsed,
+      id: typeof parsed.id === "number" ? parsed.id : undefined,
+      age: typeof parsed.age === "number" ? parsed.age : 18,
       learningTopic: typeof parsed.learningTopic === "string" ? parsed.learningTopic : "",
       learningSources: Array.isArray(parsed.learningSources) ? parsed.learningSources : [],
     } as ProfileData;
@@ -695,25 +1050,52 @@ function ProfileSetup({ initial, editing, returning, onComplete, onCancel, onRes
       : memoryAmount >= 8 || (!Number.isFinite(memoryAmount) && (detectedCores || 0) >= 6)
         ? { tier: "3B–4B quantized model", detail: "A smaller local model is the safer default for responsive tutoring and summaries.", tone: "blue" as const }
         : { tier: "1B–2B compact model", detail: "Use a compact model to reduce memory pressure and avoid slowdowns. Larger models should use a connected service.", tone: "peach" as const };
+  const [detectedSpecs, setDetectedSpecs] = useState<DeviceSpecs | null>(null);
+  const [deviceSuggestions, setDeviceSuggestions] = useState<DeviceSuggestions | null>(null);
+
   useEffect(() => {
     if (step !== 2) return;
     setAnalysisStage(0);
-    setDetectedCores(16);
-    const timers = [
-      window.setTimeout(() => setAnalysisStage(1), 350),
-      window.setTimeout(() => setAnalysisStage(2), 950),
-      window.setTimeout(() => {
+    let cancelled = false;
+    let stage = 0;
+    const interval = window.setInterval(() => {
+      if (cancelled) return;
+      stage += 1;
+      setAnalysisStage(Math.min(stage, 3));
+      if (stage >= 3) window.clearInterval(interval);
+    }, 120);
+
+    (async () => {
+      try {
+        const specs = await api.detectDevice();
+        if (cancelled) return;
+        setDetectedSpecs(specs);
+        setDetectedCores(specs.cpu_cores);
+
+        const suggestions = await api.getDeviceSuggestions(specs);
+        if (cancelled) return;
+        setDeviceSuggestions(suggestions);
         setProfile(current => ({
           ...current,
-          deviceType: "Windows 11 desktop",
-          deviceMemory: "15.9 GB",
-          modelPreference: "",
+          deviceType: specs.device_type,
+          deviceMemory: `${specs.ram_gb} GB`,
+          modelPreference: current.modelPreference || suggestions.recommended_models[0] || "llama3.2:1b",
         }));
-        setAnalysisStage(3);
-      }, 1550),
-      window.setTimeout(() => setAnalysisStage(4), 2250),
-    ];
-    return () => timers.forEach(timer => window.clearTimeout(timer));
+      } catch (err) {
+        console.warn("Backend device detection fallback:", err);
+      } finally {
+        if (!cancelled) {
+          setTimeout(() => {
+            if (!cancelled) setAnalysisStage(4);
+          }, 250);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
   }, [step]);
   useEffect(() => {
     if (!isRecording) return;
@@ -831,26 +1213,39 @@ function ProfileSetup({ initial, editing, returning, onComplete, onCancel, onRes
             {["Reading system and memory", "Checking GPU and VRAM", "Reviewing storage and CPU", "Matching compatible models"].map((message, index) => <div className={analysisStage > index ? "complete" : analysisStage === index ? "active" : ""} key={message}><span>{analysisStage > index ? <Icon name="check" size={14}/> : <i/>}</span><p><strong>{message}</strong><small>{analysisStage > index ? "Complete" : analysisStage === index ? "Analyzing…" : "Waiting"}</small></p></div>)}
           </div>
         </> : <div>
-          <div className="device-analysis-head"><span><Icon name="check"/></span><div><p className="eyebrow">ANALYSIS COMPLETE</p><h3>Your device can run compact and 7B quantized models.</h3></div></div>
+          <div className="device-analysis-head"><span><Icon name="check"/></span><div><p className="eyebrow">ANALYSIS COMPLETE</p><h3>{deviceSuggestions ? `Tier: ${deviceSuggestions.hardware_tier.toUpperCase()}` : "Your device is ready for local AI."}</h3></div></div>
           <div className="summary-stats">
-            <span><strong>15.9 GB</strong><small>RAM</small></span>
-            <span><strong>6 GB</strong><small>GTX 1660 SUPER VRAM</small></span>
-            <span><strong>16</strong><small>CPU cores</small></span>
-            <span><strong>52.1 GB</strong><small>Free storage</small></span>
-            <span><strong>Windows 11</strong><small>Operating system</small></span>
-            <span><strong>NVIDIA</strong><small>GPU acceleration</small></span>
+            <span><strong>{detectedSpecs?.ram_gb ?? 16} GB</strong><small>RAM</small></span>
+            <span><strong>{detectedSpecs?.vram_gb ? `${detectedSpecs.vram_gb} GB` : "Shared"}</strong><small>{detectedSpecs?.gpu_name || "GPU"}</small></span>
+            <span><strong>{detectedSpecs?.cpu_cores ?? 16}</strong><small>CPU cores</small></span>
+            <span><strong>{detectedSpecs?.storage_free_gb ?? 50} GB</strong><small>Free storage</small></span>
+            <span><strong>{detectedSpecs?.os ?? "Windows"}</strong><small>Operating system</small></span>
+            <span><strong>{detectedSpecs?.gpu_available ? "Active" : "Standard"}</strong><small>GPU acceleration</small></span>
           </div>
           <div className="section-heading"><div><p className="eyebrow">COMPATIBLE MODELS</p><h3>Choose one model</h3></div><Badge tone="neutral">{profile.modelPreference || "Not selected"}</Badge></div>
           <div className="learning-styles">
-            {[
-              ["Llama 3.2 3B Instruct · Q4", "Recommended · Fast and responsive for tutoring, summaries, and flashcards.", "spark"],
-              ["Phi-3.5 Mini · Q4", "Balanced · Strong reasoning in a compact model with comfortable memory headroom.", "layers"],
-              ["Qwen2.5 7B Instruct · Q4", "Best quality · Uses more of the 6 GB VRAM and may respond more slowly.", "book"],
-            ].map(([name, copy, icon]) => <button key={name} className={profile.modelPreference === name ? "selected" : ""} onClick={() => setProfile({ ...profile, modelPreference: name })} aria-pressed={profile.modelPreference === name}><span><Icon name={icon as IconName}/></span><div><strong>{name}</strong><p>{copy}</p></div><i>{profile.modelPreference === name && <Icon name="check" size={15}/>}</i></button>)}
+            {(deviceSuggestions?.recommended_models && deviceSuggestions.recommended_models.length > 0
+              ? deviceSuggestions.recommended_models
+              : ["llama3.2:1b", "llama3.2:3b", "phi3:mini"]
+            ).map((modelName) => (
+              <button
+                key={modelName}
+                className={profile.modelPreference === modelName ? "selected" : ""}
+                onClick={() => setProfile({ ...profile, modelPreference: modelName })}
+                aria-pressed={profile.modelPreference === modelName}
+              >
+                <span><Icon name={modelName.includes("1b") ? "spark" : "book"}/></span>
+                <div>
+                  <strong>{modelName}</strong>
+                  <p>{modelName === "llama3.2:1b" ? "Recommended · Fast and responsive for tutoring, summaries, and flashcards." : "Balanced study model for reasoning and quizzes."}</p>
+                </div>
+                <i>{profile.modelPreference === modelName && <Icon name="check" size={15}/>}</i>
+              </button>
+            ))}
           </div>
         </div>}
       </div>
-      <div className="hardware-note"><Icon name="settings"/><p><strong>Provided device profile</strong><br/>15.9 GB RAM · NVIDIA GeForce GTX 1660 SUPER · 6 GB VRAM · 16 CPU cores · 52.1 GB free · Windows 11.</p></div>
+      <div className="hardware-note"><Icon name="settings"/><p><strong>Detected device profile</strong><br/>{detectedSpecs ? `${detectedSpecs.device_type} · ${detectedSpecs.ram_gb} GB RAM · ${detectedSpecs.cpu_cores} cores · ${detectedSpecs.os}` : "Device specs loaded from backend."}</p></div>
       <div className="setup-actions"><Button variant="secondary" onClick={() => setStep(1)}>Back</Button><Button disabled={analysisStage < 4 || !profile.modelPreference} onClick={() => setStep(3)} icon="arrow">Use selected model</Button></div>
     </main>}
 
@@ -919,12 +1314,54 @@ export default function App() {
   const [setupOpen, setSetupOpen] = useState(true);
   const [returningLearner, setReturningLearner] = useState(Boolean(savedProfile));
   const [editingProfile, setEditingProfile] = useState(false);
+  const [activeModelInfo, setActiveModelInfo] = useState<ActiveModelStatus | null>(null);
+
   useEffect(() => {
     localStorage.setItem("lumi-last-page", page);
   }, [page]);
-  const saveProfile = (nextProfile: ProfileData) => {
-    setProfile(nextProfile);
-    localStorage.setItem("lumi-profile", JSON.stringify(nextProfile));
+
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const health = await api.getHealth();
+        const active = await api.getActiveModel(profile.id).catch(() => null);
+        if (active) setActiveModelInfo(active);
+        // Online if ollama is reachable or database is healthy
+        setOnline(health.ollama === "online" || active?.is_ollama_online === true);
+      } catch {
+        setOnline(false);
+      }
+    };
+    checkStatus();
+    const interval = setInterval(checkStatus, 30000);
+    return () => clearInterval(interval);
+  }, [profile.id]);
+  const saveProfile = async (nextProfile: ProfileData) => {
+    try {
+      const ageNum = nextProfile.age || mapAgeRangeToNumber(nextProfile.level);
+      let accountId = nextProfile.id;
+
+      if (!accountId) {
+        const created = await api.createOnboarding({
+          username: nextProfile.name.trim().toLowerCase().replace(/\s+/g, "_") || `user_${Date.now()}`,
+          age: ageNum,
+          interests: nextProfile.subjects,
+        });
+        accountId = created.id;
+      }
+
+      if (nextProfile.modelPreference && accountId) {
+        await api.selectModel(nextProfile.modelPreference, accountId).catch((e) => console.warn("Model selection warning:", e));
+      }
+
+      const mergedProfile = { ...nextProfile, id: accountId, age: ageNum };
+      setProfile(mergedProfile);
+      localStorage.setItem("lumi-profile", JSON.stringify(mergedProfile));
+    } catch (err) {
+      console.warn("Could not save to backend onboarding, using local profile:", err);
+      setProfile(nextProfile);
+      localStorage.setItem("lumi-profile", JSON.stringify(nextProfile));
+    }
     setReturningLearner(true);
     setSetupOpen(false);
     setEditingProfile(false);
@@ -940,11 +1377,95 @@ export default function App() {
     setPage("home");
     setReturningLearner(false);
   };
-  const saveAttempt = (attempt: Attempt) => {
+  const [preparedMaterial, setPreparedMaterial] = useState<{ topic: string; notes: string; files: File[] } | null>(null);
+  const [activeResource, setActiveResource] = useState<LearningResourceRead | null>(null);
+  const [activeVersion, setActiveVersion] = useState<LearningResourceVersionRead | null>(null);
+  const [activeMaterials, setActiveMaterials] = useState<Partial<StudyMaterialsResponse> | null>(null);
+  const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeMapItem[]>([]);
+
+  // Load existing resources and knowledge map if profile has an ID
+  useEffect(() => {
+    if (!profile.id) return;
+
+    (async () => {
+      try {
+        const km = await api.getKnowledgeMap(profile.id!);
+        if (km?.items) setKnowledgeItems(km.items);
+
+        const resources = await api.listLearningResources(profile.id!);
+        if (resources.length > 0) {
+          const latestRes = resources[0];
+          setActiveResource(latestRes);
+
+          const versions = await api.listVersions(latestRes.id);
+          if (versions.length > 0) {
+            const currentVer = versions.find(v => v.is_current) || versions[0];
+            setActiveVersion(currentVer);
+            if (currentVer.content && typeof currentVer.content === "object") {
+              setActiveMaterials(currentVer.content as StudyMaterialsResponse);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Error fetching learner resources or knowledge map:", err);
+      }
+    })();
+  }, [profile.id]);
+
+  const handleResourceGenerated = (result: GeneratedLearningResource) => {
+    setActiveResource(result.resource);
+    setActiveVersion(result.version);
+    if (result.version.content && typeof result.version.content === "object") {
+      setActiveMaterials(result.version.content as StudyMaterialsResponse);
+    }
+  };
+
+  const saveAttempt = async (attempt: Attempt) => {
     const next = [...attempts, attempt];
     setAttempts(next);
     setLatestAttempt(attempt);
     localStorage.setItem("lumi-attempts", JSON.stringify(next));
+
+    // Also persist study session in backend if onboarding ID and active version exist
+    if (profile.id && activeVersion?.id) {
+      try {
+        const session = await api.startStudySession({
+          onboarding_id: profile.id,
+          resource_version_id: activeVersion.id,
+          mode: "practice",
+          source: attempt.source,
+        });
+
+        // Submit each concept as an answer
+        for (const [idx, concept] of attempt.concepts.entries()) {
+          await api.submitStudyAnswer(session.id, {
+            question_id: `q_${idx + 1}`,
+            concept_id: concept.name.toLowerCase().replace(/\s+/g, "_"),
+            concept_name: concept.name,
+            student_answer: concept.correct ? "correct" : "incorrect",
+            correct_answer: "correct",
+            is_correct: concept.correct,
+            time_taken_seconds: 15,
+            confidence: 4,
+            hints_used: 0,
+          });
+        }
+
+        await api.completeStudySession(session.id, {
+          score: attempt.score,
+          total_items: attempt.total,
+          correct_items: attempt.score,
+          time_spent_seconds: 60,
+        });
+
+        // Refresh knowledge map
+        const km = await api.getKnowledgeMap(profile.id);
+        if (km?.items) setKnowledgeItems(km.items);
+      } catch (err) {
+        console.warn("Failed to persist session to backend:", err);
+      }
+    }
+
     setPage("completion");
   };
   const completeStudy = (score: number, total: number) => saveAttempt({
@@ -952,10 +1473,10 @@ export default function App() {
     total,
     completedAt: new Date().toISOString(),
     source: "study",
-    concepts: [{ name: "Inverse operations", correct: score === total }],
+    concepts: [{ name: activeMaterials?.topic || "Core Concept", correct: score === total }],
   });
   if (setupOpen) return <ProfileSetup initial={profile} editing={editingProfile} returning={returningLearner && !editingProfile} onComplete={saveProfile} onResume={() => setSetupOpen(false)} onStartNew={startNewJourney} onCancel={() => { setSetupOpen(false); setEditingProfile(false); }}/>;
-  if (page === "focus") return <Focus exit={() => setPage("library")} completeSession={completeStudy}/>;
+  if (page === "focus") return <Focus exit={() => setPage("library")} completeSession={completeStudy} materials={activeMaterials}/>;
   const titles: Record<Page, string> = {
     home: "Home", tutor: "AI Tutor", planner: "Study Mode", focus: "Focus", lessons: "Lessons",
     ingest: "Import Materials", generation: "AI Processing", library: "Learning Resources",
@@ -966,19 +1487,87 @@ export default function App() {
   return <div className="app-shell">
     <Sidebar page={page} setPage={setPage} online={online} setOnline={setOnline} profile={profile} editProfile={() => { setEditingProfile(true); setSetupOpen(true); }}/>
     <main className="main-shell"><Topbar title={titles[page]} online={online} setOnline={setOnline}/>
-      {page === "home" && <Home go={setPage} online={online} openOffline={() => setOfflineOpen(true)} profile={profile}/>}
-      {page === "tutor" && <Tutor online={online}/>}
+      {page === "home" && (
+        <Home
+          go={setPage}
+          online={online}
+          openOffline={() => setOfflineOpen(true)}
+          profile={profile}
+          activeResource={activeResource}
+          activeMaterials={activeMaterials}
+        />
+      )}
+      {page === "tutor" && (
+        <Tutor
+          online={online}
+          onboardingId={profile.id}
+          currentTopic={activeResource?.title || activeMaterials?.topic || "General Studies"}
+        />
+      )}
       {page === "planner" && <Planner start={() => setPage("focus")}/>}
       {page === "lessons" && <Lessons online={online} addMaterial={() => setPage("ingest")}/>}
-      {page === "ingest" && <ContentIngestion online={online} done={next => setPage(next || "library")}/>}
-      {page === "generation" && <Generation online={online} back={() => setPage("ingest")} finish={() => setPage("library")}/>}
-      {page === "library" && <ResourceLibrary go={setPage} create={() => setPage("ingest")}/>}
-      {page === "notes" && <NotesViewer back={() => setPage("library")} start={() => setPage("focus")}/>}
-      {page === "flashcards" && <FlashcardsViewer back={() => setPage("library")} takeQuiz={() => setPage("quiz")}/>}
-      {page === "quiz" && <QuizViewer back={() => setPage("library")} submit={saveAttempt}/>}
+      {page === "ingest" && (
+        <ContentIngestion
+          online={online}
+          done={next => setPage(next || "library")}
+          onPreparedMaterial={setPreparedMaterial}
+        />
+      )}
+      {page === "generation" && (
+        <Generation
+          online={online}
+          preparedMaterial={preparedMaterial}
+          onboardingId={profile.id}
+          back={() => setPage("ingest")}
+          finish={() => setPage("library")}
+          onResourceGenerated={handleResourceGenerated}
+        />
+      )}
+      {page === "library" && (
+        <ResourceLibrary
+          go={setPage}
+          create={() => setPage("ingest")}
+          activeResource={activeResource}
+          activeVersion={activeVersion}
+        />
+      )}
+      {page === "notes" && (
+        <NotesViewer
+          back={() => setPage("library")}
+          start={() => setPage("focus")}
+          materials={activeMaterials}
+        />
+      )}
+      {page === "flashcards" && (
+        <FlashcardsViewer
+          back={() => setPage("library")}
+          takeQuiz={() => setPage("quiz")}
+          materials={activeMaterials}
+        />
+      )}
+      {page === "quiz" && (
+        <QuizViewer
+          back={() => setPage("library")}
+          submit={saveAttempt}
+          materials={activeMaterials}
+        />
+      )}
       {page === "completion" && latestAttempt && <SessionCompletion attempt={latestAttempt} go={setPage}/>}
-      {page === "knowledge" && <KnowledgeMap attempt={latestAttempt} recommendations={() => setPage("recommendations")}/>}
-      {page === "recommendations" && <Recommendations attempt={latestAttempt} start={() => setPage("focus")} library={() => setPage("library")}/>}
+      {page === "knowledge" && (
+        <KnowledgeMap
+          attempt={latestAttempt}
+          recommendations={() => setPage("recommendations")}
+          knowledgeItems={knowledgeItems}
+        />
+      )}
+      {page === "recommendations" && (
+        <Recommendations
+          attempt={latestAttempt}
+          start={() => setPage("focus")}
+          library={() => setPage("library")}
+          knowledgeItems={knowledgeItems}
+        />
+      )}
       {page === "report" && <ComparisonReport attempts={attempts} takeQuiz={() => setPage("quiz")}/>}
       {page === "settings" && <Settings online={online} setOnline={setOnline} profile={profile} editProfile={() => { setEditingProfile(true); setSetupOpen(true); }}/>}
       {page === "progress" && <Progress openCoach={() => setPage("coach")}/>}

@@ -12,6 +12,7 @@ from app.models.study import StudyAnswer, StudySession, UserVersionProgress
 from app.repositories.learning_resource_repository import AbstractLearningResourceRepository
 from app.repositories.onboarding_repository import AbstractOnboardingRepository
 from app.repositories.study_repository import AbstractStudyRepository
+from app.schemas.knowledge_map import KnowledgeMapItem, KnowledgeMapResponse, KnowledgeState
 from app.schemas.learning_resource import VersionProgressRead
 from app.schemas.study import (
     StudyAnswerCreate,
@@ -21,6 +22,9 @@ from app.schemas.study import (
     StudySessionRead,
     StudySessionStart,
 )
+
+_KNOWLEDGE_WINDOW_SESSIONS = 3
+_STATE_ORDER = {"needs_practice": 0, "developing": 1, "strong": 2}
 
 
 class StudyService:
@@ -191,6 +195,50 @@ class StudyService:
         }
         return content
 
+    def list_sessions(self, *, onboarding_id: int, limit: int = 100) -> list[StudySessionRead]:
+        """List a learner's completed sessions, newest first (reports, weekly chart)."""
+        self._ensure_onboarding_exists(onboarding_id)
+        sessions = self._study_repo.list_completed_sessions(
+            onboarding_id=onboarding_id, limit=limit
+        )
+        return [StudySessionRead.model_validate(session) for session in sessions]
+
+    def get_knowledge_map(self, *, onboarding_id: int) -> KnowledgeMapResponse:
+        """Per-concept mastery from each concept's latest three completed sessions."""
+        self._ensure_onboarding_exists(onboarding_id)
+        rows = self._study_repo.list_answers_with_sessions(onboarding_id=onboarding_id)
+
+        by_concept: dict[str, list[tuple[StudyAnswer, StudySession]]] = {}
+        for answer, session in rows:
+            by_concept.setdefault(answer.concept_id, []).append((answer, session))
+
+        items: list[KnowledgeMapItem] = []
+        for concept_id, pairs in by_concept.items():
+            session_ids: list[int] = []
+            for _, session in pairs:
+                if session.id not in session_ids:
+                    session_ids.append(session.id)
+            window = set(session_ids[:_KNOWLEDGE_WINDOW_SESSIONS])
+            evidence = [(a, s) for a, s in pairs if s.id in window]
+
+            correct = sum(1 for answer, _ in evidence if answer.is_correct)
+            accuracy = round(correct / len(evidence) * 100, 2)
+            newest_answer, newest_session = evidence[0]
+            items.append(
+                KnowledgeMapItem(
+                    concept_id=concept_id,
+                    concept_name=newest_answer.concept_name or concept_id,
+                    accuracy=accuracy,
+                    answers=len(evidence),
+                    sessions=len(window),
+                    state=self._knowledge_state_for_accuracy(accuracy),
+                    last_seen=newest_session.completed_at,
+                )
+            )
+
+        items.sort(key=lambda item: (_STATE_ORDER[item.state], item.accuracy, item.concept_name))
+        return KnowledgeMapResponse(onboarding_id=onboarding_id, items=items)
+
     def _upsert_progress(self, session: StudySession) -> VersionProgressRead:
         progress = self._study_repo.get_progress(
             onboarding_id=session.onboarding_id,
@@ -270,4 +318,12 @@ class StudyService:
             return "mastered"
         if accuracy >= 50:
             return "learning"
+        return "needs_practice"
+
+    @staticmethod
+    def _knowledge_state_for_accuracy(accuracy: float) -> KnowledgeState:
+        if accuracy >= 80:
+            return "strong"
+        if accuracy >= 50:
+            return "developing"
         return "needs_practice"

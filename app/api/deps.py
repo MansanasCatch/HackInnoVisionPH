@@ -16,6 +16,7 @@ from app.services.health_service import HealthService
 from app.services.learning_resource_service import LearningResourceService
 from app.services.local_ai_service import LocalAIService
 from app.services.onboarding_service import OnboardingService
+from app.services.resource_generation_service import ResourceGenerationService
 from app.services.study_service import StudyService
 
 DbSession = Annotated[Session, Depends(get_db)]
@@ -48,6 +49,15 @@ def get_learning_resource_service(db: DbSession) -> LearningResourceService:
     )
 
 
+def get_resource_generation_service(db: DbSession) -> ResourceGenerationService:
+    """Compose a :class:`ResourceGenerationService` backed by SQLAlchemy."""
+    return ResourceGenerationService(
+        ai_service=get_local_ai_service(db),
+        resource_service=get_learning_resource_service(db),
+        onboarding_repository=SqlAlchemyOnboardingRepository(db),
+    )
+
+
 def get_study_service(db: DbSession) -> StudyService:
     """Compose a :class:`StudyService` backed by SQLAlchemy."""
     return StudyService(
@@ -70,3 +80,6 @@ LearningResourceServiceDep = Annotated[
 ]
 StudyServiceDep = Annotated[StudyService, Depends(get_study_service)]
 HealthServiceDep = Annotated[HealthService, Depends(get_health_service)]
+ResourceGenerationServiceDep = Annotated[
+    ResourceGenerationService, Depends(get_resource_generation_service)
+]

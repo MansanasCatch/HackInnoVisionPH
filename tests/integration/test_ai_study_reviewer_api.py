@@ -98,3 +98,16 @@ def test_generate_exam_with_dynamic_topic_and_empty_prompt(client: TestClient) -
     assert materials["exam"]["total_points"] > 0
     assert "Cell division" in materials["exam"]["title"]
 
+
+
+def test_generate_with_files_accepts_free_text_notes(client: TestClient) -> None:
+    form_data = {
+        "topic": "Cell division",
+        "prompt": "",
+        "text_context": "Metaphase aligns chromosomes at the cell equator during mitosis.",
+    }
+    response = client.post("/api/v1/ai/generate-with-files", data=form_data)
+    assert response.status_code == 200
+    materials = response.json()["study_materials"]
+    assert materials["topic"] == "Cell division"
+    assert "equator" in materials["summary"]["content"]

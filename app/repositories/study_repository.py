@@ -51,6 +51,16 @@ class AbstractStudyRepository(Protocol):
         """Persist changes to a progress record."""
         ...
 
+    def list_completed_sessions(self, *, onboarding_id: int, limit: int) -> Sequence[StudySession]:
+        """List a learner's completed sessions, newest first."""
+        ...
+
+    def list_answers_with_sessions(
+        self, *, onboarding_id: int
+    ) -> Sequence[tuple[StudyAnswer, StudySession]]:
+        """List answers from a learner's completed sessions, newest session first."""
+        ...
+
     def lock_resource(self, resource_id: int) -> None:
         """Serialize completions that could advance the same resource."""
         ...
@@ -66,6 +76,7 @@ class AbstractStudyRepository(Protocol):
     def rollback(self) -> None:
         """Cancel an incomplete transition."""
         ...
+
 
 
 class SqlAlchemyStudyRepository(AbstractStudyRepository):
@@ -131,6 +142,32 @@ class SqlAlchemyStudyRepository(AbstractStudyRepository):
         self._session.add(progress)
         self._session.flush()
         return progress
+
+    def list_completed_sessions(self, *, onboarding_id: int, limit: int) -> Sequence[StudySession]:
+        statement = (
+            select(StudySession)
+            .where(
+                StudySession.onboarding_id == onboarding_id,
+                StudySession.completed_at.is_not(None),
+            )
+            .order_by(StudySession.completed_at.desc(), StudySession.id.desc())
+            .limit(limit)
+        )
+        return self._session.scalars(statement).all()
+
+    def list_answers_with_sessions(
+        self, *, onboarding_id: int
+    ) -> Sequence[tuple[StudyAnswer, StudySession]]:
+        statement = (
+            select(StudyAnswer, StudySession)
+            .join(StudySession, StudyAnswer.study_session_id == StudySession.id)
+            .where(
+                StudySession.onboarding_id == onboarding_id,
+                StudySession.completed_at.is_not(None),
+            )
+            .order_by(StudySession.id.desc(), StudyAnswer.id.asc())
+        )
+        return [(answer, session) for answer, session in self._session.execute(statement).all()]
 
     def lock_resource(self, resource_id: int) -> None:
         self._session.execute(
