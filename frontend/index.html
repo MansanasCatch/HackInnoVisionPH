@@ -1,128 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>InnoVisionPH Hackathon 2026</title>
-  <meta name="description"
-    content="Welcome to InnoVisionPH Hackathon 2026. Clean Code Architecture with FastAPI, SQLAlchemy, and Alembic migrations.">
-  <meta name="theme-color" content="#0b0b1a">
+  <title>Lumi — Local AI Tutor</title>
+  <meta name="description" content="Lumi is a local-first, private AI learning companion providing personalized study plans, focused review, adaptive coaching, and evidence-based progress tracking.">
+  <meta name="theme-color" content="#f5f4ef">
   <link rel="icon" type="image/svg+xml" href="/static/assets/favicon.svg">
 
-  <!-- Google Fonts -->
+  <!-- Google Fonts: DM Sans & Manrope -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap">
-
-  <!-- Font Awesome Icons: https://fontawesome.com/search?o=r&m=free -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
-    crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Manrope:wght@600;700;800&display=swap">
 
   <link rel="stylesheet" href="/static/css/styles.css">
-  <script type="module" src="/static/js/app.js"></script>
 </head>
-
 <body>
-  <div class="bg-orbs" aria-hidden="true">
-    <span class="orb orb--violet"></span>
-    <span class="orb orb--cyan"></span>
-    <span class="orb orb--gold"></span>
-  </div>
+  <div id="app"></div>
 
-  <!-- Header -->
-  <header class="site-header">
-    <nav class="nav container" aria-label="Main navigation">
-      <a href="/" class="brand" id="brand-link">
-        <span class="brand__logo"><i class="fa-solid fa-lightbulb"></i></span>
-        <span class="brand__name">InnoVision<span class="text-gradient">PH</span></span>
-      </a>
-      <div class="nav__actions">
-        <span class="status-pill" id="api-status" role="status" aria-live="polite">
-          <span class="status-pill__dot"></span>
-          <span class="status-pill__text">Checking Backend…</span>
-        </span>
-        <a href="/docs" target="_blank" rel="noopener" class="btn btn--sm btn--ghost" id="nav-docs-btn">
-          <i class="fa-solid fa-code"></i> API Docs
-        </a>
-      </div>
-    </nav>
-  </header>
-
-  <!-- Main Content: Welcome Message & Countdown -->
-  <main class="main-content container">
-    <section class="welcome-card glass" aria-labelledby="welcome-title">
-      <span class="badge">
-        <i class="fa-solid fa-rocket"></i> InnoVisionPH Hackathon 2026
-      </span>
-
-      <h1 id="welcome-title" class="welcome__title">
-        Welcome, <span class="text-gradient">Innovators!</span>
-      </h1>
-
-      <p class="welcome__message">
-        Welcome to the InnoVisionPH Hackathon! Your FastAPI Clean Code Architecture starter is live,
-        wired to the database, and ready for you to build your solution. Skip the boilerplate and
-        focus on shipping an impactful project.
-      </p>
-
-      <!-- Countdown: Oct 4, 2026 to Oct 9, 2026 -->
-      <div class="countdown glass" aria-label="Countdown to October 9, 2026">
-        <p class="countdown__label">
-          <i class="fa-regular fa-clock"></i> Hackathon Finale &middot; October 9, 2026
-        </p>
-        <div class="countdown__grid">
-          <div class="countdown__cell">
-            <span id="cd-days">00</span>
-            <small>Days</small>
-          </div>
-          <div class="countdown__cell">
-            <span id="cd-hours">00</span>
-            <small>Hours</small>
-          </div>
-          <div class="countdown__cell">
-            <span id="cd-minutes">00</span>
-            <small>Minutes</small>
-          </div>
-          <div class="countdown__cell">
-            <span id="cd-seconds">00</span>
-            <small>Seconds</small>
-          </div>
-        </div>
-      </div>
-
-      <!-- Live Database & Repository Connection Status -->
-      <div class="db-status-bar glass" id="db-status-bar">
-        <span class="db-status-bar__icon"><i class="fa-solid fa-database"></i></span>
-        <span class="db-status-bar__info">
-          Database Migration: <strong id="db-status-text">Connected</strong>
-          &middot; Model Table: <code id="db-model-name">projects</code> (<span id="project-count">...</span> seeded)
-        </span>
-      </div>
-
-      <!-- Quick Action Buttons -->
-      <div class="welcome__actions">
-        <a href="/docs" target="_blank" rel="noopener" class="btn btn--primary" id="hero-docs-btn">
-          <i class="fa-solid fa-arrow-up-right-from-square"></i> Interactive API Docs
-        </a>
-        <a href="/api/v1/health" target="_blank" rel="noopener" class="btn btn--ghost" id="hero-health-btn">
-          <i class="fa-solid fa-heart-pulse"></i> System Health
-        </a>
-      </div>
-    </section>
-  </main>
-
-  <!-- Footer -->
-  <footer class="site-footer">
-    <div class="container site-footer__inner">
-      <p>&copy; <span id="year">2026</span> InnoVisionPH Hackathon. Built with <i class="fa-solid fa-heart"></i> using FastAPI.</p>
-      <div class="site-footer__links">
-        <a href="/docs" target="_blank" rel="noopener" aria-label="Swagger docs"><i class="fa-solid fa-book"></i></a>
-        <a href="/redoc" target="_blank" rel="noopener" aria-label="ReDoc"><i class="fa-solid fa-file-code"></i></a>
-      </div>
+  <noscript>
+    <div style="padding: 40px; text-align: center; font-family: sans-serif; background: #f5f4ef; color: #24332d; min-height: 100vh;">
+      <h2>JavaScript Required</h2>
+      <p>Lumi is an interactive, local-first learning companion that runs client-side. Please enable JavaScript in your browser to continue.</p>
     </div>
-  </footer>
-</body>
+  </noscript>
 
+  <script type="module" src="/static/js/app.js"></script>
+</body>
 </html>
