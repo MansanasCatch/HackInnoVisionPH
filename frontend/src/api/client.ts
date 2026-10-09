@@ -96,8 +96,20 @@ export const api = {
 
   // Device & Models
   async detectDevice(): Promise<DeviceSpecs> {
-    const res = await fetch(`${BASE_URL}/device/detect`);
-    return handleResponse<DeviceSpecs>(res);
+    const res = await fetch(`${BASE_URL}/device/detect`, {
+      method: "POST",
+    });
+    const data = await handleResponse<any>(res);
+    return {
+      device_type: data.device_type || (data.ram_gb >= 16 ? "Desktop" : "Laptop"),
+      os: data.os || data.os_name || "Windows",
+      cpu_cores: data.cpu_cores || 8,
+      ram_gb: data.ram_gb || 16,
+      gpu_available: Boolean(data.gpu_name && !data.gpu_name.includes("Standard")),
+      gpu_name: data.gpu_name || null,
+      vram_gb: data.vram_gb || 0,
+      storage_free_gb: data.storage_free_gb || 50,
+    };
   },
 
   async getDeviceSuggestions(specs?: DeviceSpecs | null): Promise<DeviceSuggestions> {
