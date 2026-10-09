@@ -215,3 +215,22 @@ export interface HealthResponse {
   ollama: string;
   installed_models: string[];
 }
+
+export interface AIGenerateRequest {
+  prompt: string;
+  topic?: string;
+  onboarding_id?: number;
+  model_override?: string;
+  system_prompt?: string;
+  temperature?: number;
+}
+
+export interface AIGenerateResponse {
+  response: string;
+  model_used: string;
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+  total_tokens?: number | null;
+  execution_time_seconds: number;
+  is_ollama_online: boolean;
+}

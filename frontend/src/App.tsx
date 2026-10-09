@@ -152,15 +152,31 @@ function ProgressRing({ value, label }: { value: number; label: string }) {
   return <div className="progress-ring" style={{ "--progress": `${value * 3.6}deg` } as React.CSSProperties}><div><strong>{value}%</strong><small>{label}</small></div></div>;
 }
 
-function Home({ go, online, openOffline, profile }: { go: (p: Page) => void; online: boolean; openOffline: () => void; profile: ProfileData }) {
+function Home({
+  go,
+  online,
+  openOffline,
+  profile,
+  activeResource,
+  activeMaterials,
+}: {
+  go: (p: Page) => void;
+  online: boolean;
+  openOffline: () => void;
+  profile: ProfileData;
+  activeResource?: LearningResourceRead | null;
+  activeMaterials?: Partial<StudyMaterialsResponse> | null;
+}) {
   const firstName = profile.name.trim().split(" ")[0] || "Learner";
-  const focusSubject = profile.subjects[0] || "Mathematics";
+  const focusSubject = activeResource?.subject || profile.subjects[0] || "Mathematics";
+  const currentTopic = activeResource?.title || activeMaterials?.topic || "Cell division & mitosis";
+
   return <div className="page home-page">
     <section className="hero">
       <div className="hero-copy">
         <Badge tone="peach">WELCOME BACK</Badge>
         <h2>Ready to learn, {firstName}?</h2>
-        <p>Start with {focusSubject.toLowerCase()}, create new resources, or review your learning report.</p>
+        <p>Continue with {focusSubject.toLowerCase()}, create new resources, or review your learning report.</p>
         <div className="hero-actions"><Button onClick={() => go("planner")} icon="play">Begin learning</Button><span>Choose your study mode</span></div>
       </div>
       <div className="hero-visual" aria-hidden="true">
@@ -183,64 +199,110 @@ function Home({ go, online, openOffline, profile }: { go: (p: Page) => void; onl
       <section className="panel today-panel">
         <div className="section-heading"><div><p className="eyebrow">SUGGESTED NEXT</p><h3>Your study plan</h3></div><button className="text-button" onClick={() => go("planner")}>Open Study Mode <Icon name="chevron" size={15}/></button></div>
         <div className="timeline">
-          <div className="timeline-item"><span className="timeline-dot">1</span><div><strong>Review cell structure</strong><small>12 flashcards · suggested</small></div><span>20 min</span></div>
-          <div className="timeline-item current"><span className="timeline-dot">2</span><div><strong>Quadratic equations</strong><small>Worked examples · up next</small><div className="mini-progress"><span/></div></div><span>25 min</span></div>
-          <div className="timeline-item"><span className="timeline-dot">3</span><div><strong>French Revolution</strong><small>Summary + quick quiz</small></div><span>30 min</span></div>
+          <div className="timeline-item"><span className="timeline-dot">1</span><div><strong>Review {currentTopic}</strong><small>{activeMaterials?.flashcards?.length || 3} flashcards · saved</small></div><span>20 min</span></div>
+          <div className="timeline-item current"><span className="timeline-dot">2</span><div><strong>Practice {currentTopic}</strong><small>{activeMaterials?.quizzes?.length || 3} questions · up next</small><div className="mini-progress"><span/></div></div><span>25 min</span></div>
+          <div className="timeline-item"><span className="timeline-dot">3</span><div><strong>Comprehensive Review</strong><small>Summary + knowledge checks</small></div><span>30 min</span></div>
         </div>
       </section>
     </div>
 
     <section className="section-block">
-      <div className="section-heading"><div><p className="eyebrow">SAVED FOR YOU</p><h3>Pick up where you left off</h3></div><button className="text-button" onClick={() => go("lessons")}>View all <Icon name="arrow" size={15}/></button></div>
+      <div className="section-heading"><div><p className="eyebrow">SAVED FOR YOU</p><h3>Pick up where you left off</h3></div><button className="text-button" onClick={() => go("library")}>View all <Icon name="arrow" size={15}/></button></div>
       <div className="resource-row">
-        <button className="resource-card" onClick={() => go("notes")}><span className="subject-art biology"><Icon name="book" size={30}/></span><span><Badge>Biology</Badge><strong>Cell division & mitosis</strong><small><Icon name="clock" size={14}/> Key notes · demo source</small></span></button>
-        <button className="resource-card" onClick={() => go("flashcards")}><span className="subject-art maths"><Icon name="cards" size={30}/></span><span><Badge tone="peach">Biology</Badge><strong>Mitosis recall cards</strong><small><Icon name="cards" size={14}/> 3 flashcards · offline</small></span></button>
-        <button className="resource-card" onClick={() => go("quiz")}><span className="subject-art history"><Icon name="quiz" size={30}/></span><span><Badge tone="blue">Biology</Badge><strong>Cell division reviewer</strong><small><Icon name="quiz" size={14}/> Practice quiz · 3 questions</small></span></button>
+        <button className="resource-card" onClick={() => go("notes")}><span className="subject-art biology"><Icon name="book" size={30}/></span><span><Badge>{focusSubject}</Badge><strong>{currentTopic}</strong><small><Icon name="clock" size={14}/> Key notes & summary</small></span></button>
+        <button className="resource-card" onClick={() => go("flashcards")}><span className="subject-art maths"><Icon name="cards" size={30}/></span><span><Badge tone="peach">{focusSubject}</Badge><strong>{currentTopic} cards</strong><small><Icon name="cards" size={14}/> {activeMaterials?.flashcards?.length || 3} recall cards</small></span></button>
+        <button className="resource-card" onClick={() => go("quiz")}><span className="subject-art history"><Icon name="quiz" size={30}/></span><span><Badge tone="blue">{focusSubject}</Badge><strong>{currentTopic} reviewer</strong><small><Icon name="quiz" size={14}/> {activeMaterials?.quizzes?.length || 3} questions</small></span></button>
       </div>
     </section>
   </div>;
 }
 
-function Tutor({ online }: { online: boolean }) {
-  const [messages, setMessages] = useState([
-    { role: "user", text: "Why does the sign change when I move a number to the other side of an equation?" },
-    { role: "tutor", text: "Think of an equation like a balanced scale. You’re not really “moving” the number—you’re doing the opposite operation to both sides so the scale stays balanced.", detail: "For example: x + 3 = 8. Subtract 3 from both sides: x + 3 − 3 = 8 − 3, so x = 5." },
+function Tutor({
+  online,
+  onboardingId,
+  currentTopic = "General Studies",
+}: {
+  online: boolean;
+  onboardingId?: number;
+  currentTopic?: string;
+}) {
+  const [messages, setMessages] = useState<Array<{ role: "user" | "tutor"; text: string; detail?: string }>>([
+    {
+      role: "tutor",
+      text: `Hello! I'm Lumi, your local AI learning companion. Ask me any question about ${currentTopic} or whatever you're reviewing.`,
+      detail: "I run privately and offline on your device.",
+    },
   ]);
   const [input, setInput] = useState("");
-  const [detail, setDetail] = useState(false);
-  const send = (text = input) => {
-    if (!text.trim()) return;
-    setMessages(m => [...m, { role: "user", text }, { role: "tutor", text: online ? "Let’s take it one small step at a time. I’ll use the balance idea and show you what changes on each side." : "Live AI help needs an internet connection. Your saved explanation and practice cards are still available offline.", detail: online ? "Start by identifying the operation attached to the number. Then apply its inverse to both sides." : undefined }]);
+  const [loading, setLoading] = useState(false);
+  const [detail, setDetail] = useState(true);
+
+  const send = async (text = input) => {
+    const question = text.trim();
+    if (!question || loading) return;
+
+    setMessages(m => [...m, { role: "user", text: question }]);
     setInput("");
+    setLoading(true);
+
+    try {
+      const res = await api.aiGenerate({
+        prompt: question,
+        topic: currentTopic,
+        onboarding_id: onboardingId,
+        system_prompt: `You are Lumi, a patient, encouraging, and clear AI tutor. Keep explanations focused and easy to follow.`,
+      });
+
+      setMessages(m => [
+        ...m,
+        {
+          role: "tutor",
+          text: res.response,
+          detail: `Model: ${res.model_used || "Local AI"} · ${res.execution_time_seconds.toFixed(1)}s`,
+        },
+      ]);
+    } catch (err: any) {
+      setMessages(m => [
+        ...m,
+        {
+          role: "tutor",
+          text: online
+            ? `I couldn't process that question right now: ${err?.message || "Unknown error"}`
+            : "Offline AI tutor: You are currently offline. Please ensure Ollama is running or reconnect your device.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
+
   return <div className="tutor-layout">
     <section className="chat-area">
-      <div className="chat-intro"><Lumi size="medium"/><div><Badge tone={online ? "sage" : "neutral"}>{online ? "LUMI · AI TUTOR ONLINE" : "LUMI · LIVE HELP UNAVAILABLE"}</Badge><h2>Let’s figure this out together.</h2><p>Ask Lumi a question, or choose a quick way to continue.</p></div></div>
+      <div className="chat-intro"><Lumi size="medium"/><div><Badge tone={online ? "sage" : "neutral"}>{online ? "LUMI · AI TUTOR ACTIVE" : "LUMI · OFFLINE"}</Badge><h2>Let’s figure this out together.</h2><p>Ask Lumi a question, or choose a quick way to continue.</p></div></div>
       <div className="messages">
         {messages.map((m, i) => <div key={i} className={`message-row ${m.role}`}>
           {m.role === "tutor" && <Lumi size="small"/>}
-          <div className="message-bubble"><p>{m.text}</p>{m.detail && <div className="worked-example"><strong>Worked example</strong><p>{m.detail}</p></div>}
-            {m.role === "tutor" && i === 1 && <><button className="disclosure" onClick={() => setDetail(!detail)}>{detail ? "Hide" : "Show"} why this works <Icon name="chevron" size={14}/></button>{detail && <p className="detail-copy">Adding and subtracting the same amount preserves equality. Both sides change equally, so the relationship stays true.</p>}</>}
+          <div className="message-bubble"><p style={{ whiteSpace: "pre-wrap" }}>{m.text}</p>{m.detail && <div className="worked-example"><strong>Details</strong><p>{m.detail}</p></div>}
           </div>
         </div>)}
+        {loading && (
+          <div className="message-row tutor">
+            <Lumi size="small"/>
+            <div className="message-bubble"><p><em>Lumi is thinking locally on your device…</em></p></div>
+          </div>
+        )}
       </div>
-      <div className="suggestion-row">{["Explain it simply", "Show me another example", "Test my understanding"].map(x => <button key={x} onClick={() => send(x)}>{x}</button>)}</div>
+      <div className="suggestion-row">{["Explain it simply", "Give me a practice question", "Summarize key formulas"].map(x => <button key={x} onClick={() => send(x)} disabled={loading}>{x}</button>)}</div>
       <form className="composer" onSubmit={(e: FormEvent) => { e.preventDefault(); send(); }}>
-        <button type="button" className="composer-icon" aria-label="Add learning material"><Icon name="plus"/></button>
-        <input value={input} onChange={e => setInput(e.target.value)} placeholder="Ask a follow-up question…" aria-label="Tutor question"/>
-        <button type="button" className="composer-icon" aria-label="Use voice input" title={online ? "Voice input prototype" : "Voice unavailable offline"}><Icon name="mic"/></button>
-        <button type="submit" className="send-button" aria-label="Send question"><Icon name="send"/></button>
+        <input value={input} disabled={loading} onChange={e => setInput(e.target.value)} placeholder={loading ? "Lumi is generating…" : "Ask a question about this topic…"} aria-label="Tutor question"/>
+        <button type="submit" disabled={loading || !input.trim()} className="send-button" aria-label="Send question"><Icon name="send"/></button>
       </form>
-      <p className="prototype-note">Demo tutor responses are pre-written for this prototype; no live AI model is connected.</p>
     </section>
     <aside className="context-panel">
-      <p className="eyebrow">CURRENT CONTEXT</p><h3>Quadratic equations</h3>
-      <div className="context-meta"><span><Icon name="book" size={16}/> Mathematics</span><span><Icon name="clock" size={16}/> Studying 14 min</span></div>
+      <p className="eyebrow">CURRENT CONTEXT</p><h3>{currentTopic}</h3>
+      <div className="context-meta"><span><Icon name="book" size={16}/> Active Study</span><span><Icon name="spark" size={16}/> Local AI Engine</span></div>
       <hr/>
-      <p className="eyebrow">SAVE THIS EXPLANATION AS</p>
-      <button className="context-action"><Icon name="cards"/><span><strong>Flashcards</strong><small>3 suggested cards</small></span><Icon name="plus"/></button>
-      <button className="context-action"><Icon name="quiz"/><span><strong>Quick practice</strong><small>4 understanding checks</small></span><Icon name="plus"/></button>
-      <div className="support-note"><Icon name="download"/><p><strong>Available offline</strong><br/>Saved cards and quizzes work without a connection.</p></div>
+      <div className="support-note"><Icon name="download"/><p><strong>Local & Offline</strong><br/>All chat questions are processed on your device.</p></div>
     </aside>
   </div>;
 }
@@ -302,20 +364,49 @@ function Planner({ start }: { start: () => void }) {
   </div>;
 }
 
-function Focus({ exit, completeSession }: { exit: () => void; completeSession: (score: number, total: number) => void }) {
+function Focus({
+  exit,
+  completeSession,
+  materials,
+}: {
+  exit: () => void;
+  completeSession: (score: number, total: number) => void;
+  materials?: Partial<StudyMaterialsResponse> | null;
+}) {
   const [step, setStep] = useState(0);
   const [paused, setPaused] = useState(false);
   const [flipped, setFlipped] = useState(false);
   const [answer, setAnswer] = useState<number | null>(null);
+
+  const topicTitle = materials?.topic || "Quadratic equations";
+  const keyIdea = materials?.summary?.content ||
+    materials?.reviewer?.sections?.[0]?.content ||
+    "Undo each operation in reverse order. To isolate x, treat the equation like a wrapped gift.";
+  const keyTakeaway = materials?.reviewer?.sections?.[0]?.key_points?.[0] ||
+    "Subtract 6 first, then divide by 2. This reverses the original operations.";
+
+  const cardQuestion = materials?.flashcards?.[0]?.question || "How do you keep an equation balanced?";
+  const cardAnswer = materials?.flashcards?.[0]?.answer || "Apply the inverse operation to both sides. Whatever you do to one side, do to the other.";
+
+  const firstQuiz = materials?.quizzes?.[0];
+  const quizQ = firstQuiz?.question || "What is the first step to solve 3x − 4 = 11?";
+  const quizOpts = firstQuiz?.options && firstQuiz.options.length > 0
+    ? firstQuiz.options
+    : ["Divide both sides by 3", "Add 4 to both sides", "Subtract 11 from both sides"];
+  const correctOptIdx = firstQuiz?.options
+    ? firstQuiz.options.findIndex(opt => opt === firstQuiz.correct_answer || opt.toLowerCase() === firstQuiz.correct_answer.toLowerCase())
+    : 1;
+  const targetCorrectIdx = correctOptIdx >= 0 ? correctOptIdx : 1;
+
   return <div className="focus-shell">
-    <header className="focus-header"><button className="brand" onClick={exit}><span className="brand-mark"><Icon name="spark" size={18}/></span><span>Lumi</span></button><div className="focus-progress"><span><strong>Quadratic equations</strong><small>Activity {step + 1} of 3 · {25 - step * 8} min remaining</small></span><div><i style={{ width: `${(step + 1) * 33}%` }}/></div></div><Button onClick={() => setPaused(!paused)} variant="secondary" icon={paused ? "play" : "pause"}>{paused ? "Resume" : "Pause"}</Button></header>
+    <header className="focus-header"><button className="brand" onClick={exit}><span className="brand-mark"><Icon name="spark" size={18}/></span><span>Lumi</span></button><div className="focus-progress"><span><strong>{topicTitle}</strong><small>Activity {step + 1} of 3 · {25 - step * 8} min remaining</small></span><div><i style={{ width: `${(step + 1) * 33}%` }}/></div></div><Button onClick={() => setPaused(!paused)} variant="secondary" icon={paused ? "play" : "pause"}>{paused ? "Resume" : "Pause"}</Button></header>
     <main className="focus-main">
       {paused ? <div className="pause-state"><div className="complete-mark"><Icon name="pause"/></div><h2>Session paused.</h2><p>Take the time you need. Your place is saved on this device.</p><Button onClick={() => setPaused(false)} icon="play">Resume when ready</Button></div> :
       <><div className="focus-kicker"><span>ACTIVITY {step + 1}</span><Badge tone="blue">{step === 0 ? "CONCEPT" : step === 1 ? "FLASHCARD" : "QUICK CHECK"}</Badge></div>
-      {step === 0 && <article className="learning-card"><p className="eyebrow">THE KEY IDEA</p><h2>Undo each operation in reverse order.</h2><p>To isolate <b>x</b>, treat the equation like a wrapped gift. Remove the outermost “layer” first, and do the same thing to both sides.</p><div className="equation"><span>2x + 6 = 18</span><Icon name="arrow"/><span>2x = 12</span><Icon name="arrow"/><span>x = 6</span></div><div className="callout"><Icon name="spark"/><p><strong>Notice the order:</strong> subtract 6 first, then divide by 2. This reverses the original operations.</p></div></article>}
-      {step === 1 && <button className={`flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)}><span className="eyebrow">{flipped ? "ANSWER" : "TAP TO REVEAL"}</span><strong>{flipped ? "Apply the inverse operation to both sides." : "How do you keep an equation balanced?"}</strong><small>{flipped ? "Whatever you do to one side, do to the other." : "Think about the balance-scale analogy."}</small></button>}
-      {step === 2 && <article className="learning-card quiz-card"><p className="eyebrow">TRY THIS</p><h2>What is the first step to solve 3x − 4 = 11?</h2>{["Divide both sides by 3", "Add 4 to both sides", "Subtract 11 from both sides"].map((x, i) => <button key={x} className={`answer-option ${answer === i ? "selected" : ""}`} onClick={() => setAnswer(i)} aria-pressed={answer === i}><span>{String.fromCharCode(65 + i)}</span>{x}</button>)}</article>}
-      <div className="focus-footer"><p>{step === 0 ? "Read at your own pace." : step === 1 ? "Retrieval practice strengthens memory." : "Choose the best first step."}</p><Button disabled={step === 2 && answer === null} onClick={() => step === 2 ? completeSession(answer === 1 ? 1 : 0, 1) : setStep(step + 1)} icon="arrow">{step === 2 ? "Finish session" : "Next"}</Button></div></>}
+      {step === 0 && <article className="learning-card"><p className="eyebrow">THE KEY IDEA</p><h2>{topicTitle}</h2><p style={{ whiteSpace: "pre-line" }}>{keyIdea}</p><div className="callout"><Icon name="spark"/><p><strong>Core Concept:</strong> {keyTakeaway}</p></div></article>}
+      {step === 1 && <button className={`flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)}><span className="eyebrow">{flipped ? "ANSWER" : "TAP TO REVEAL"}</span><strong>{flipped ? cardAnswer : cardQuestion}</strong><small>{flipped ? "Tap to flip back" : "Think about the concept before flipping"}</small></button>}
+      {step === 2 && <article className="learning-card quiz-card"><p className="eyebrow">TRY THIS</p><h2>{quizQ}</h2>{quizOpts.map((x, i) => <button key={x} className={`answer-option ${answer === i ? "selected" : ""}`} onClick={() => setAnswer(i)} aria-pressed={answer === i}><span>{String.fromCharCode(65 + i)}</span>{x}</button>)}</article>}
+      <div className="focus-footer"><p>{step === 0 ? "Read at your own pace." : step === 1 ? "Retrieval practice strengthens memory." : "Choose the best answer."}</p><Button disabled={step === 2 && answer === null} onClick={() => step === 2 ? completeSession(answer === targetCorrectIdx ? 1 : 0, 1) : setStep(step + 1)} icon="arrow">{step === 2 ? "Finish session" : "Next"}</Button></div></>}
     </main>
   </div>;
 }
@@ -1380,7 +1471,7 @@ export default function App() {
     concepts: [{ name: activeMaterials?.topic || "Core Concept", correct: score === total }],
   });
   if (setupOpen) return <ProfileSetup initial={profile} editing={editingProfile} returning={returningLearner && !editingProfile} onComplete={saveProfile} onResume={() => setSetupOpen(false)} onStartNew={startNewJourney} onCancel={() => { setSetupOpen(false); setEditingProfile(false); }}/>;
-  if (page === "focus") return <Focus exit={() => setPage("library")} completeSession={completeStudy}/>;
+  if (page === "focus") return <Focus exit={() => setPage("library")} completeSession={completeStudy} materials={activeMaterials}/>;
   const titles: Record<Page, string> = {
     home: "Home", tutor: "AI Tutor", planner: "Study Mode", focus: "Focus", lessons: "Lessons",
     ingest: "Import Materials", generation: "AI Processing", library: "Learning Resources",
@@ -1391,8 +1482,23 @@ export default function App() {
   return <div className="app-shell">
     <Sidebar page={page} setPage={setPage} online={online} setOnline={setOnline} profile={profile} editProfile={() => { setEditingProfile(true); setSetupOpen(true); }}/>
     <main className="main-shell"><Topbar title={titles[page]} online={online} setOnline={setOnline}/>
-      {page === "home" && <Home go={setPage} online={online} openOffline={() => setOfflineOpen(true)} profile={profile}/>}
-      {page === "tutor" && <Tutor online={online}/>}
+      {page === "home" && (
+        <Home
+          go={setPage}
+          online={online}
+          openOffline={() => setOfflineOpen(true)}
+          profile={profile}
+          activeResource={activeResource}
+          activeMaterials={activeMaterials}
+        />
+      )}
+      {page === "tutor" && (
+        <Tutor
+          online={online}
+          onboardingId={profile.id}
+          currentTopic={activeResource?.title || activeMaterials?.topic || "General Studies"}
+        />
+      )}
       {page === "planner" && <Planner start={() => setPage("focus")}/>}
       {page === "lessons" && <Lessons online={online} addMaterial={() => setPage("ingest")}/>}
       {page === "ingest" && (

@@ -52,6 +52,16 @@ export const api = {
     return handleResponse<HealthResponse>(res);
   },
 
+  // AI Inference
+  async aiGenerate(data: import("./types").AIGenerateRequest): Promise<import("./types").AIGenerateResponse> {
+    const res = await fetch(`${BASE_URL}/ai/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    return handleResponse<import("./types").AIGenerateResponse>(res);
+  },
+
   // Onboarding
   async createOnboarding(data: OnboardingCreate): Promise<OnboardingProfile> {
     const res = await fetch(`${BASE_URL}/onboarding`, {
