@@ -1,8 +1,8 @@
 """Data-access layer. Repositories hide persistence details from the services."""
 
-from app.repositories.project_repository import (
-    AbstractProjectRepository,
-    SqlAlchemyProjectRepository,
+from app.repositories.onboarding_repository import (
+    AbstractOnboardingRepository,
+    SqlAlchemyOnboardingRepository,
 )
 
-__all__ = ["AbstractProjectRepository", "SqlAlchemyProjectRepository"]
+__all__ = ["AbstractOnboardingRepository", "SqlAlchemyOnboardingRepository"]

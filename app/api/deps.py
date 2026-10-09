@@ -7,17 +7,17 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
-from app.repositories.project_repository import SqlAlchemyProjectRepository
+from app.repositories.onboarding_repository import SqlAlchemyOnboardingRepository
 from app.services.health_service import HealthService
-from app.services.project_service import ProjectService
+from app.services.onboarding_service import OnboardingService
 
 DbSession = Annotated[Session, Depends(get_db)]
 AppSettings = Annotated[Settings, Depends(get_settings)]
 
 
-def get_project_service(db: DbSession) -> ProjectService:
-    """Compose a :class:`ProjectService` backed by SQLAlchemy."""
-    return ProjectService(SqlAlchemyProjectRepository(db))
+def get_onboarding_service(db: DbSession) -> OnboardingService:
+    """Compose an :class:`OnboardingService` backed by SQLAlchemy."""
+    return OnboardingService(SqlAlchemyOnboardingRepository(db))
 
 
 def get_health_service(db: DbSession, settings: AppSettings) -> HealthService:
@@ -25,5 +25,5 @@ def get_health_service(db: DbSession, settings: AppSettings) -> HealthService:
     return HealthService(db, settings)
 
 
-ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
+OnboardingServiceDep = Annotated[OnboardingService, Depends(get_onboarding_service)]
 HealthServiceDep = Annotated[HealthService, Depends(get_health_service)]

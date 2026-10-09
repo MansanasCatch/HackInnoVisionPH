@@ -1,7 +1,59 @@
-# 🚀 InnoVisionPH Hackathon Starter
+# 🚀 Offline AI Learning Coach — InnoVisionPH
 
-A **Clean Code Architecture** starter kit built with **Python + FastAPI**, SQLAlchemy 2.0, Alembic database migrations,
-and a **pure HTML / CSS / JavaScript** welcome page featuring a live hackathon countdown and backend connectivity status.
+An **Offline AI Learning Coach** starter & API built with **Python + FastAPI**, SQLAlchemy 2.0, Alembic database migrations, and a pure HTML / CSS / JavaScript interface.
+
+---
+
+## 💡 Project Flow & System Architecture
+
+### Flow
+
+#### A. Setup
+- **Onboarding / Account Setup**: Create a local profile (username, list of interests, age, study level, subjects, exam dates, daily study time).
+- **Device Specs Setup**: Detect RAM, GPU, and storage, then pick the right local AI model (or a non-AI fallback).
+
+#### B. Create
+- **Ingest**: Lessons, notes, and files are extracted, chunked, and tagged to topics.
+- **Process Flow**: Job queue, prompt templates, output validation, and progress tracking.
+- **Local AI**: Runs on-device (in-browser or local server) and generates study material.
+- **Generate**: Produces Notes Summary / Key Notes, Flashcards, and Quizzes / Exam / Reviewer.
+- **Learning Resources**: The central hub that stores everything with version history.
+- **Report: Learning Comparison**: Compares progress across versions.
+
+#### C. Study
+- **Study Mode**: The student picks topics and available time.
+- **Load Learning Resources**: Builds the session queue by priority.
+- **Recalculating**: Updates priorities using the latest 3 versions.
+- **Start**: Begins the session.
+- **Scene**: Where the student answers quizzes, exams, and flashcards.
+- **Completed**: Shows score and summary.
+- **Update Knowledge Map**: Updates mastery, analyzes mistakes, and writes back to Learning Resources.
+
+```text
+The Loop:
+Ingest ──► Local AI ──► Generate ──► Learning Resources
+                                           │
+Study Mode ──► Load ──► Recalculating ──► Start ──► Scene ──► Completed
+                                                                 │
+                                       Update Knowledge Map ─────┘
+```
+
+#### 📊 Scene Records Per Answer
+- Question and concept ID
+- Student's answer
+- Correct or not
+- Time taken
+- Confidence score
+- Hints used
+
+#### 🧩 Gaps to Add
+- Study planner step (“5 topics in 2 hours”)
+- Mistake analyzer and adaptive practice
+- Fallback when AI isn’t available
+- Retry path for bad AI output
+- Recording consent step
+- Tutor chat
+- Settings, export, and backup
 
 ---
 
@@ -16,8 +68,7 @@ and a **pure HTML / CSS / JavaScript** welcome page featuring a live hackathon c
 7. [Database Migrations](#-database-migrations)
 8. [Testing & Code Quality](#-testing--code-quality)
 9. [Icons (Font Awesome)](#-icons-font-awesome)
-10. [Adding a New Feature](#-adding-a-new-feature-checklist)
-11. [Troubleshooting](#-troubleshooting)
+10. [Troubleshooting](#-troubleshooting)
 
 ---
 
@@ -25,7 +76,7 @@ and a **pure HTML / CSS / JavaScript** welcome page featuring a live hackathon c
 
 | Tool | Version | Download |
 | --- | --- | --- |
-| **Python** | **3.12 or newer** (tested on Python 3.14) | https://www.python.org/downloads/ |
+| **Python** | **3.12 or newer** (tested on Python 3.12/3.14) | https://www.python.org/downloads/ |
 | **Git** | Latest | https://git-scm.com/downloads |
 | **VS Code** *(recommended)* | Latest | https://code.visualstudio.com/ |
 
@@ -89,7 +140,7 @@ python run.py
 
 1. 🔪 **Auto-kills** any process already listening on the port (default `8000`) to prevent "address already in use" errors.
 2. ⏳ Waits until the port is completely free.
-3. 🗄️ **Applies database migrations** (`alembic upgrade head`) — the SQLite database and sample records are initialized automatically.
+3. 🗄️ **Applies database migrations** (`alembic upgrade head`) — the SQLite database and tables are initialized automatically.
 4. 🔁 Starts Uvicorn with **hot-reload** enabled during development.
 
 | Command | Description |
@@ -119,16 +170,16 @@ InnoVisionPH/
 │   │   ├── deps.py               #    Dependency injection wiring
 │   │   └── v1/
 │   │       ├── router.py         #    Aggregated API v1 router
-│   │       └── endpoints/        #    health.py, projects.py
+│   │       └── endpoints/        #    health.py, onboarding.py
 │   ├── services/                 # 🧠 Business logic / domain use cases
-│   │   ├── project_service.py    #    Project use cases
+│   │   ├── onboarding_service.py #    User onboarding use cases
 │   │   └── health_service.py     #    Health check logic
 │   ├── repositories/             # 🗃️ Data access (Abstract port + SQLAlchemy adapter)
-│   │   └── project_repository.py
+│   │   └── onboarding_repository.py
 │   ├── models/                   # 🧱 SQLAlchemy 2.0 ORM models (Database tables)
-│   │   └── project.py            #    Sample Project model
+│   │   └── onboarding.py         #    OnboardingProfile model
 │   ├── schemas/                  # 📦 Pydantic schemas (Request / response contracts)
-│   │   ├── project.py
+│   │   ├── onboarding.py         #    OnboardingCreate, OnboardingRead, OnboardingUpdate
 │   │   └── health.py
 │   ├── db/                       # ⚙️ Database engine, session maker, declarative base & SQLite DB (`innovision.db`)
 │   └── core/                     # 🔧 Configuration (.env), logging & custom exceptions
@@ -139,18 +190,16 @@ InnoVisionPH/
 │   └── assets/favicon.svg        # Clean SVG favicon
 ├── migrations/                   # Alembic database migrations
 │   ├── env.py                    # Migration environment connected to app metadata
-│   └── versions/                 # 20261004_0001_create_projects.py (seed data included)
+│   └── versions/                 # 20261010_0002_create_onboardings.py
 ├── tests/
 │   ├── conftest.py               # Shared fixtures (in-memory SQLite, TestClient)
 │   ├── unit/                     # ✅ Unit tests (isolated, fast, no HTTP/DB required)
 │   └── integration/              # 🔗 Repository & API integration tests
-├── .vscode/                      # Editor settings, launch configs & recommended plugins
 ├── alembic.ini                   # Alembic configuration
 ├── pyproject.toml                # Pytest, coverage & Ruff linting configuration
 ├── requirements.txt              # Pinned Python dependencies
 ├── run.py                        # Launcher (auto-kill port, migrate & start)
 ├── .env.example                  # Environment variables template
-├── .editorconfig                 # Consistent whitespace & formatting rules
 └── .gitignore                    # Standard Python, DB, and cache ignores
 ```
 
@@ -168,7 +217,7 @@ InnoVisionPH/
 
 - **Thin Controllers**: Routers in `app/api/` only validate payloads and delegate to services.
 - **Pure Business Logic**: Services in `app/services/` contain domain logic and never import framework-specific HTTP components.
-- **Repository Pattern**: Services depend on the `AbstractProjectRepository` interface, making them straightforward to unit-test with mock repositories.
+- **Repository Pattern**: Services depend on abstract repository interfaces (`AbstractOnboardingRepository`), making them straightforward to unit-test with mock repositories.
 - **Centralized Error Handling**: Services raise domain exceptions (`NotFoundError`, `ConflictError`), which FastAPI translates into standardized JSON error responses.
 
 ---
@@ -180,10 +229,11 @@ Base path: `/api/v1`
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/health` | API liveness and database connectivity status |
-| `GET` | `/projects/stats` | Aggregated project statistics by status (used by Welcome page) |
-| `GET` | `/projects` | List projects (with optional status filter, limit, offset) |
-| `GET` | `/projects/{id}` | Retrieve a single project by ID |
-| `POST` | `/projects` | Register a new project |
+| `POST` | `/onboarding` | Save onboarding account setup (Username, List of interests, Age) |
+| `GET` | `/onboarding` | List onboarding profiles (with optional pagination limit & offset) |
+| `GET` | `/onboarding/{id}` | Get onboarding profile by ID |
+| `GET` | `/onboarding/user/{username}` | Get onboarding profile by Username |
+| `PUT` | `/onboarding/{id}` | Update onboarding profile |
 
 ---
 
@@ -205,79 +255,14 @@ alembic downgrade -1
 alembic current
 ```
 
-> **Note**: When creating a new model, import it in `app/models/__init__.py` so Alembic's autogenerate can detect it.
-
-**Switching to PostgreSQL**:
-
-```bash
-pip install "psycopg[binary]"
-# In .env:
-DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/innovision
-```
-
 ---
 
 ## 🧪 Testing & Code Quality
 
 ```bash
-# Run the test suite (warnings are treated as errors)
-pytest
-
-# Run tests with test coverage summary
-pytest --cov
-
-# Check linting with Ruff
-ruff check .
-
-# Format code with Ruff
-ruff format .
+# Run the test suite
+.\.venv\Scripts\pytest.exe
 ```
-
-Standards enforced:
-
-- **Strict Warning Free**: `filterwarnings = ["error"]` in `pyproject.toml`.
-- **Ruff**: Modern Python 3.12+ rules, PEP 8 compliance, and import sorting.
-- **Type Annotations**: Comprehensive type hinting across models, schemas, and services.
-
----
-
-## 🎨 Icons (Font Awesome)
-
-The UI uses **Font Awesome 6 (Free)** included via CDN in `frontend/index.html`:
-
-```html
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-```
-
-| Resource | Link |
-| --- | --- |
-| 🔍 Search free icons | https://fontawesome.com/search?o=r&m=free |
-| 📖 Usage guide | https://docs.fontawesome.com/web/add-icons/how-to |
-| 🌐 CDN source (cdnjs) | https://cdnjs.com/libraries/font-awesome |
-
-Examples:
-
-```html
-<i class="fa-solid fa-rocket"></i>       <!-- Solid icon -->
-<i class="fa-regular fa-clock"></i>      <!-- Regular icon -->
-<i class="fa-solid fa-database"></i>     <!-- Database icon -->
-```
-
----
-
-## ✅ Adding a New Feature (Checklist)
-
-Example: adding a `Team` resource.
-
-1. **Model** &rarr; `app/models/team.py` and register it in `app/models/__init__.py`.
-2. **Migration** &rarr; `alembic revision --autogenerate -m "create teams table"` &rarr; `alembic upgrade head`.
-3. **Schemas** &rarr; `app/schemas/team.py` (`TeamCreate`, `TeamRead`).
-4. **Repository** &rarr; `app/repositories/team_repository.py` (abstract interface + SQLAlchemy implementation).
-5. **Service** &rarr; `app/services/team_service.py` (domain rules, raise custom errors).
-6. **Dependency Injection** &rarr; wire `get_team_service` in `app/api/deps.py`.
-7. **Router** &rarr; `app/api/v1/endpoints/teams.py` and include in `app/api/v1/router.py`.
-8. **Tests** &rarr; `tests/unit/test_team_service.py` & `tests/integration/test_teams_api.py`.
-9. Verify with `ruff check .` and `pytest`.
 
 ---
 
@@ -288,8 +273,7 @@ Example: adding a `Team` resource.
 | `python` not recognized | Reinstall Python with **Add python.exe to PATH** checked, or run with `py` on Windows |
 | Cannot activate venv in PowerShell | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
 | Port 8000 occupied | `python run.py` automatically terminates existing listeners; or specify a custom port: `python run.py --port 9000` |
-| Reset database | Delete `app/db/innovision.db` and start `python run.py` (migrations re-create tables and seeds automatically) |
-| `Unable to copy ...venvlauncher.exe` | The `.venv` is in use by a running process. Stop any running server (`Ctrl+C`) before recreating the virtual environment |
+| Reset database | Delete `app/db/innovision.db` and start `python run.py` (migrations re-create tables automatically) |
 
 ---
 
