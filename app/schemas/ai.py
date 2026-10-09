@@ -19,7 +19,18 @@ class ExtractedFileContent(BaseModel):
 class AIGenerateRequest(BaseModel):
     """Payload for text prompt AI generation."""
 
-    prompt: str = Field(min_length=1, description="Prompt text / question for the AI")
+    prompt: str = Field(
+        default="",
+        description=(
+            "Prompt text or question for the AI (if blank, dynamically generated from documents)"
+        ),
+    )
+    topic: str | None = Field(
+        default=None,
+        description=(
+            "Specific study topic (e.g. 'Cell division', 'Mechanics'). Auto-inferred if omitted."
+        ),
+    )
     onboarding_id: int | None = Field(
         default=None, description="Onboarding account ID to retrieve active model selection"
     )

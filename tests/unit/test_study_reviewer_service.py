@@ -66,3 +66,36 @@ def test_build_offline_fallback_study_materials() -> None:
     assert len(fallback.flashcards) > 0
     assert len(fallback.source_coverage.content_gaps) > 0
     assert "offline" in fallback.source_coverage.content_gaps[0].lower()
+
+
+def test_synthesize_dynamic_exam_prompt_from_documents() -> None:
+    from app.services.study_reviewer_service import synthesize_dynamic_exam_prompt
+
+    doc1 = ExtractedFileContent(
+        filename="Physics_Chapter_4_Mechanics.pdf",
+        file_type="pdf",
+        content_type="application/pdf",
+        character_count=500,
+        extracted_text=(
+            "Chapter 4: Newton's Laws of Motion and Gravitational Force.\n"
+            "An object in motion stays in motion unless acted upon by an external net force.\n"
+            "Force equals mass times acceleration (F = ma)."
+        ),
+    )
+
+    # Empty user prompt -> dynamic synthesis generates exam prompt based on doc contents
+    prompt = synthesize_dynamic_exam_prompt(
+        user_prompt="",
+        documents=[doc1],
+    )
+    assert "Newton's Laws" in prompt or "Mechanics" in prompt
+    assert "exam" in prompt.lower()
+
+    # User already asked for an exam -> keeps/enriches context
+    custom_prompt = synthesize_dynamic_exam_prompt(
+        user_prompt="Provide a hard mock exam",
+        documents=[doc1],
+    )
+    assert "Provide a hard mock exam" in custom_prompt
+    assert "Newton's Laws" in custom_prompt or "Mechanics" in custom_prompt
+

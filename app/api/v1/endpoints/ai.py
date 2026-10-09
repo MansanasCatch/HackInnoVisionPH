@@ -37,7 +37,21 @@ def generate_text_with_local_ai(
 )
 async def generate_with_files(
     service: LocalAIServiceDep,
-    prompt: Annotated[str, Form(description="Prompt text or question for the AI")],
+    prompt: Annotated[
+        str,
+        Form(
+            description=(
+                "Prompt text or question for the AI. If left empty, dynamically auto-generated "
+                "from the topic and uploaded documents."
+            )
+        ),
+    ] = "",
+    topic: Annotated[
+        str | None,
+        Form(
+            description="Topic from user UI (e.g. 'Cell division'). Auto-inferred if blank."
+        ),
+    ] = None,
     onboarding_id: Annotated[int | None, Form(description="Onboarding account ID")] = None,
     model_override: Annotated[str | None, Form(description="Optional model tag override")] = None,
     system_prompt: Annotated[str | None, Form(description="Optional system prompt")] = None,
@@ -67,6 +81,7 @@ async def generate_with_files(
 
     req = AIGenerateRequest(
         prompt=prompt,
+        topic=topic,
         onboarding_id=onboarding_id,
         model_override=model_override,
         system_prompt=system_prompt,

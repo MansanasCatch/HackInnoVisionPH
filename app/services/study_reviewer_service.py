@@ -36,10 +36,74 @@ def detect_prompt_intent(prompt: str) -> Literal["question", "study_reviewer"]:
     return "study_reviewer"
 
 
+def infer_topic_from_documents(
+    topic: str | None,
+    documents: list[ExtractedFileContent],
+    fallback_title: str = "General Studies",
+) -> str:
+    """Derive topic from user input topic, prompt, document header, or filename."""
+    if topic and topic.strip():
+        return topic.strip()
+
+    # If fallback_title was passed (e.g. from prompt) and isn't generic
+    if fallback_title and fallback_title.strip() and fallback_title != "General Studies":
+        return fallback_title.strip()
+
+    if not documents:
+        return fallback_title
+
+    first_doc = documents[0]
+    # Check document header lines first
+    for line in first_doc.extracted_text.splitlines():
+        line_str = line.strip()
+        # Strip trailing colon from section headers if present
+        if line_str and 3 <= len(line_str) <= 60 and not line_str.startswith("="):
+            return line_str.rstrip(":")
+
+    # Fall back to filename
+    cleaned_name = re.sub(r"\.[a-zA-Z0-9]+$", "", first_doc.filename)
+    cleaned_name = re.sub(r"[_\-]+", " ", cleaned_name).strip()
+    if cleaned_name and len(cleaned_name) >= 3:
+        return cleaned_name.title()
+
+    return fallback_title
+
+
+def synthesize_dynamic_exam_prompt(
+    user_prompt: str,
+    documents: list[ExtractedFileContent],
+    topic: str | None = None,
+) -> str:
+    """Dynamically craft an exam reviewer prompt grounded in uploaded document contents."""
+    derived_topic = infer_topic_from_documents(topic, documents)
+    clean_prompt = user_prompt.strip() if user_prompt else ""
+
+    doc_titles = [doc.filename for doc in documents] if documents else ["provided materials"]
+    doc_summary = ", ".join(doc_titles[:3])
+
+    if not clean_prompt:
+        return (
+            f"Generate a rigorous exam and comprehensive study reviewer on '{derived_topic}' "
+            f"derived strictly from the uploaded document(s): {doc_summary}. "
+            "Ensure the exam contains multiple choice and short answer questions "
+            "with points and explanations."
+        )
+
+    # If the user provided a topic or custom request, combine it dynamically
+    if derived_topic.lower() not in clean_prompt.lower():
+        return (
+            f"{clean_prompt} for '{derived_topic}', based strictly on the uploaded source "
+            f"materials ({doc_summary})."
+        )
+
+    return clean_prompt
+
+
 def build_study_prompts(
     prompt: str,
     intent: Literal["question", "study_reviewer"],
     documents: list[ExtractedFileContent],
+    topic: str | None = None,
     notes_context: str | None = None,
     custom_system_prompt: str | None = None,
 ) -> tuple[str, str]:
@@ -75,21 +139,28 @@ def build_study_prompts(
         f"\n[ADDITIONAL CONTEXT / NOTES]:\n{notes_context.strip()}\n" if notes_context else ""
     )
 
+    resolved_topic = infer_topic_from_documents(
+        topic, documents, fallback_title=prompt or "General Studies"
+    )
     instructions = (
         "TASK INSTRUCTIONS:\n"
-        f'1. Target Topic / User Input: "{prompt}"\n'
-        f'2. Detected Intent: "{intent}"\n'
+        f'1. Target Topic / Curriculum Subject: "{resolved_topic}"\n'
+        f'2. User Request / Objective: "{prompt}"\n'
+        f'3. Detected Intent: "{intent}"\n'
     )
     if intent == "question":
         instructions += (
-            "3. The user asked a specific question. In the JSON output, provide a direct, concise, "
+            "4. The user asked a specific question. In the JSON output, provide a direct, concise, "
             "and accurate answer in the 'direct_answer' field, and focus all accompanying reviewer "
-            "notes, flashcards, and quizzes specifically around that question's subject.\n"
+            "notes, flashcards, quizzes, and exam specifically around that question's subject.\n"
         )
     else:
         instructions += (
-            "3. Provide a comprehensive study guide covering the main topic and all subtopics "
-            "found in the source documents. Set 'direct_answer' to null.\n"
+            "4. Provide a comprehensive study guide and rigorous mock exam covering the main topic "
+            "and all subtopics found in the source documents. Set 'direct_answer' to null.\n"
+            "5. Ensure the 'exam' section provides challenging questions (multiple choice and "
+            "short answer/essay) with full point values, correct answers, and thorough "
+            "pedagogical explanations.\n"
         )
 
     ans_placeholder = '"<Direct Answer>"' if intent == "question" else "null"
@@ -137,12 +208,14 @@ def build_study_prompts(
 
 
 def build_offline_fallback_study_materials(
-    topic: str,
+    topic: str | None,
     intent: Literal["question", "study_reviewer"],
     documents: list[ExtractedFileContent],
     warning_msg: str,
 ) -> StudyMaterialsResponse:
     """Generate a deterministic, structured study materials tree from extracted document text."""
+    resolved_topic = infer_topic_from_documents(topic, documents)
+
     # Concatenate text from documents
     all_text = " ".join(doc.extracted_text for doc in documents).strip()
     sentences = [s.strip() for s in re.split(r"[.\n]", all_text) if len(s.strip()) > 15]
@@ -150,24 +223,24 @@ def build_offline_fallback_study_materials(
     sample_summary = (
         ". ".join(sentences[:3]) + "."
         if sentences
-        else f"Study materials derived from uploaded documents on {topic}."
+        else f"Study materials derived from uploaded documents on {resolved_topic}."
     )
 
-    first_fact = sentences[0] if sentences else f"Introduction to {topic}"
-    second_fact = sentences[1] if len(sentences) > 1 else f"Core principles of {topic}"
+    first_fact = sentences[0] if sentences else f"Introduction to {resolved_topic}"
+    second_fact = sentences[1] if len(sentences) > 1 else f"Core principles of {resolved_topic}"
 
     direct_ans = f"Based on the source text: {first_fact}." if intent == "question" else None
 
     return StudyMaterialsResponse(
         intent=intent,
         direct_answer=direct_ans,
-        topic=topic,
+        topic=resolved_topic,
         source_summary=f"Extracted content from {len(documents)} uploaded file(s).",
         reviewer=Reviewer(
-            title=f"Reviewer: {topic}",
+            title=f"Reviewer: {resolved_topic}",
             sections=[
                 ReviewerSection(
-                    title=f"{topic} - Overview",
+                    title=f"{resolved_topic} - Overview",
                     content=sample_summary,
                     key_points=[first_fact, second_fact],
                 )
@@ -176,38 +249,41 @@ def build_offline_fallback_study_materials(
         summary=Summary(content=sample_summary),
         key_notes=[
             KeyNotesItem(
-                topic=topic,
+                topic=resolved_topic,
                 notes=[first_fact, second_fact],
             )
         ],
         flashcards=[
             Flashcard(
-                question=f"What is the key takeaway regarding {topic}?",
+                question=f"What is the key takeaway regarding {resolved_topic}?",
                 answer=first_fact,
-                topic=topic,
+                topic=resolved_topic,
                 difficulty="easy",
             )
         ],
         quizzes=[
             QuizQuestion(
                 type="multiple_choice",
-                question=f"Which fact regarding {topic} is supported by the document?",
+                question=f"Which fact regarding {resolved_topic} is supported by the document?",
                 options=[first_fact, "Unsupported statement A", "Unsupported statement B"],
                 correct_answer=first_fact,
                 explanation="Directly referenced in the uploaded document text.",
-                topic=topic,
+                topic=resolved_topic,
                 difficulty="medium",
             )
         ],
         exam=Exam(
-            title=f"{topic} Examination",
+            title=f"{resolved_topic} Examination",
             questions=[
                 ExamQuestion(
                     type="short_answer",
-                    question=f"Explain the primary concept of {topic} as described in the source.",
+                    question=(
+                        f"Explain the primary concept of '{resolved_topic}' "
+                        "described in the source."
+                    ),
                     correct_answer=first_fact,
                     explanation="Synthesized from the uploaded lesson notes.",
-                    topic=topic,
+                    topic=resolved_topic,
                     difficulty="hard",
                     points=5,
                 )
@@ -216,7 +292,7 @@ def build_offline_fallback_study_materials(
             total_points=5,
         ),
         source_coverage=SourceCoverage(
-            covered_topics=[topic],
+            covered_topics=[resolved_topic],
             content_gaps=[
                 f"Note: {warning_msg}. Fallback structured study pack generated "
                 "directly from document text."

@@ -21,6 +21,8 @@ from app.services.study_reviewer_service import (
     build_offline_fallback_study_materials,
     build_study_prompts,
     detect_prompt_intent,
+    infer_topic_from_documents,
+    synthesize_dynamic_exam_prompt,
 )
 from app.services.token_manager import (
     calculate_safe_token_budget,
@@ -72,12 +74,22 @@ class LocalAIService:
                 parsed = parse_uploaded_file(fname, content_bytes, content_type)
                 ingested_files.append(parsed)
 
-        # 3. Detect intent and build grounded educational prompt
+        # 3. Detect intent and build grounded educational prompt dynamically
+        dynamic_prompt = synthesize_dynamic_exam_prompt(
+            user_prompt=request.prompt,
+            documents=ingested_files,
+            topic=request.topic,
+        )
+        resolved_topic = infer_topic_from_documents(
+            request.topic, ingested_files, fallback_title=request.prompt
+        )
+
         intent = detect_prompt_intent(request.prompt)
         sys_prompt, user_prompt = build_study_prompts(
-            prompt=request.prompt,
+            prompt=dynamic_prompt,
             intent=intent,
             documents=ingested_files,
+            topic=resolved_topic,
             notes_context=request.text_context,
             custom_system_prompt=request.system_prompt,
         )
@@ -134,7 +146,7 @@ class LocalAIService:
                     target_model,
                 )
                 study_materials = build_offline_fallback_study_materials(
-                    topic=request.prompt,
+                    topic=resolved_topic,
                     intent=intent,
                     documents=ingested_files,
                     warning_msg=(
@@ -149,11 +161,11 @@ class LocalAIService:
         else:
             response_text = self._build_offline_fallback_response(
                 model=target_model,
-                prompt=request.prompt,
+                prompt=dynamic_prompt,
                 ingested_files=ingested_files,
             )
             study_materials = build_offline_fallback_study_materials(
-                topic=request.prompt,
+                topic=resolved_topic,
                 intent=intent,
                 documents=ingested_files,
                 warning_msg="Local Ollama server offline",

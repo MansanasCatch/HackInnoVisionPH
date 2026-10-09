@@ -73,3 +73,28 @@ def test_generate_study_reviewer_with_image_ocr(client: TestClient) -> None:
     assert res["ingested_files"][0]["file_type"] == "image"
     assert res["study_materials"] is not None
     assert "warnings" in res
+
+
+def test_generate_exam_with_dynamic_topic_and_empty_prompt(client: TestClient) -> None:
+    content = (
+        b"Cell Division and Mitosis:\n"
+        b"Prophase: Chromosomes condense and spindle fibers form.\n"
+        b"Metaphase: Chromosomes align along the equatorial metaphase plate.\n"
+        b"Anaphase: Sister chromatids separate and move toward opposite poles.\n"
+        b"Telophase: Nuclear envelopes reform around the separated chromatids.\n"
+    )
+    files = [("files", ("Cell_Division_Notes.txt", content, "text/plain"))]
+    # Simulating UI input: user entered topic="Cell Division", prompt is empty/not passed
+    form_data = {"topic": "Cell division", "prompt": ""}
+
+    response = client.post("/api/v1/ai/generate-with-files", data=form_data, files=files)
+    assert response.status_code == 200
+    res = response.json()
+
+    materials = res.get("study_materials")
+    assert materials is not None
+    assert "Cell division" in materials["topic"]
+    assert materials["exam"]["total_questions"] >= 1
+    assert materials["exam"]["total_points"] > 0
+    assert "Cell division" in materials["exam"]["title"]
+
