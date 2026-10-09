@@ -53,9 +53,9 @@ def check_capacity_warnings(model: ModelProfile, input_tokens: int) -> list[str]
     if ratio >= 0.75:
         percent = round(ratio * 100)
         warnings.append(
-            f"⚠️ Input files consume ~{input_tokens} tokens ({percent}% of model '{model.model_name}' "
-            f"context limit of {model.context_tokens} tokens). Output token budget was automatically "
-            "clamped to prevent truncation."
+            f"⚠️ Input files consume ~{input_tokens} tokens ({percent}% of model "
+            f"'{model.model_name}' context limit of {model.context_tokens} tokens). "
+            "Output token budget was automatically clamped to prevent truncation."
         )
 
     return warnings

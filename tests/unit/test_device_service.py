@@ -82,9 +82,7 @@ def test_model_recommendations_reasons() -> None:
     # Test low spec hardware
     res_low = recommend_models_for_hardware(ram_gb=4.0, vram_gb=0.0)
     assert res_low.recommended_model == "qwen2.5:0.5b"
-    assert any(
-        "Fits" in m.reason for m in res_low.models if m.model_name == "qwen2.5:0.5b"
-    )
+    assert any("Fits" in m.reason for m in res_low.models if m.model_name == "qwen2.5:0.5b")
 
     # Test high spec hardware
     res_high = recommend_models_for_hardware(ram_gb=16.0, vram_gb=6.0, gpu_name="RTX 3060")

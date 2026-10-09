@@ -27,5 +27,3 @@ def test_ai_generate_with_files_multipart(client: TestClient) -> None:
     assert res["attached_files_count"] == 1
     assert res["ingested_files"][0]["filename"] == "dna_notes.txt"
     assert "DNA structure" in res["ingested_files"][0]["extracted_text"]
-
-

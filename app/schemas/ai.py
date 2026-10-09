@@ -118,7 +118,9 @@ class SourceCoverage(BaseModel):
     covered_topics: list[str] = Field(default_factory=list)
     content_gaps: list[str] = Field(
         default_factory=list,
-        description="Explicit gaps identified in source documents instead of inventing missing information",
+        description=(
+            "Explicit gaps identified in source documents instead of inventing missing information"
+        ),
     )
 
 

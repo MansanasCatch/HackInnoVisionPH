@@ -2,17 +2,8 @@
 
 from app.schemas.ai import (
     AIGenerateResponse,
-    Exam,
-    ExamQuestion,
     ExtractedFileContent,
-    Flashcard,
-    KeyNotesItem,
-    QuizQuestion,
-    Reviewer,
-    ReviewerSection,
-    SourceCoverage,
     StudyMaterialsResponse,
-    Summary,
 )
 
 
@@ -27,14 +18,19 @@ def test_study_materials_response_serialization() -> None:
             "sections": [
                 {
                     "title": "First Law of Motion",
-                    "content": "An object at rest stays at rest unless acted upon by a net external force.",
+                    "content": (
+                        "An object at rest stays at rest unless acted upon by a net external force."
+                    ),
                     "key_points": ["Inertia is mass-dependent", "F_net = 0 means a = 0"],
                 }
             ],
         },
         "summary": {"content": "Summary of inertia and momentum."},
         "key_notes": [
-            {"topic": "Inertia", "notes": ["Resistance to acceleration", "Directly proportional to mass"]}
+            {
+                "topic": "Inertia",
+                "notes": ["Resistance to acceleration", "Directly proportional to mass"],
+            }
         ],
         "flashcards": [
             {
@@ -61,7 +57,9 @@ def test_study_materials_response_serialization() -> None:
                 {
                     "type": "short_answer",
                     "question": "State Newton's first law.",
-                    "correct_answer": "An object maintains its state of rest or uniform motion unless acted upon by a force.",
+                    "correct_answer": (
+                        "An object maintains its state of rest or uniform motion unless acted upon."
+                    ),
                     "explanation": "Fundamental law of inertia.",
                     "topic": "Newton's Laws",
                     "difficulty": "hard",

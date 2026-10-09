@@ -49,7 +49,9 @@ def test_build_offline_fallback_study_materials() -> None:
         file_type="txt",
         content_type="text/plain",
         character_count=200,
-        extracted_text="Solar Photovoltaics: Converts sunlight directly into electricity using semiconductors.",
+        extracted_text=(
+            "Solar Photovoltaics: Converts sunlight directly into electricity using semiconductors."
+        ),
     )
     fallback = build_offline_fallback_study_materials(
         topic="Solar Energy",

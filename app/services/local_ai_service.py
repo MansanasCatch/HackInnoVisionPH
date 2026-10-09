@@ -107,9 +107,7 @@ class LocalAIService:
         study_materials: StudyMaterialsResponse | None = None
 
         images_payload: list[str] = [
-            f.base64_data
-            for f in ingested_files
-            if f.file_type == "image" and f.base64_data
+            f.base64_data for f in ingested_files if f.file_type == "image" and f.base64_data
         ]
 
         if ollama_online:
@@ -131,17 +129,22 @@ class LocalAIService:
             else:
                 # LLM output could not be parsed (e.g. 404 model not pulled or bad output)
                 logger.warning(
-                    "Model '%s' output could not be parsed into study materials. Using deterministic fallback.",
+                    "Model '%s' output could not be parsed into study materials. "
+                    "Using deterministic fallback.",
                     target_model,
                 )
                 study_materials = build_offline_fallback_study_materials(
                     topic=request.prompt,
                     intent=intent,
                     documents=ingested_files,
-                    warning_msg=f"Model '{target_model}' output unparseable or error: {raw_output[:80]}",
+                    warning_msg=(
+                        f"Model '{target_model}' output unparseable or error: "
+                        f"{raw_output[:60]}"
+                    ),
                 )
                 warnings.append(
-                    f"Notice: Model '{target_model}' did not return valid JSON. Fallback study materials generated."
+                    f"Notice: Model '{target_model}' did not return valid JSON. "
+                    "Fallback study materials generated."
                 )
         else:
             response_text = self._build_offline_fallback_response(
@@ -156,7 +159,8 @@ class LocalAIService:
                 warning_msg="Local Ollama server offline",
             )
             warnings.append(
-                "Local Ollama server is offline. Deterministic study reviewer generated from uploaded files."
+                "Local Ollama server is offline. "
+                "Deterministic study reviewer generated from uploaded files."
             )
 
         elapsed = round(time.monotonic() - start_time, 3)

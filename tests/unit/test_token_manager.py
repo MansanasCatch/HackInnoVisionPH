@@ -27,8 +27,11 @@ def test_calculate_safe_token_budget() -> None:
     budget = calculate_safe_token_budget(profile, input_tokens=2000, requested_max_tokens=None)
     assert budget == 4096
 
-    # When input is 6000 tokens, safe budget is clamped to remaining capacity: 8192 - 6000 - 500 = 1692
-    tight_budget = calculate_safe_token_budget(profile, input_tokens=6000, requested_max_tokens=None)
+    # When input is 6000 tokens, safe budget is clamped:
+    # 8192 - 6000 - 500 = 1692
+    tight_budget = calculate_safe_token_budget(
+        profile, input_tokens=6000, requested_max_tokens=None
+    )
     assert tight_budget == 1692
 
     # When user requests an explicit lower budget, respect it

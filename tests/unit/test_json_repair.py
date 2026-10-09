@@ -1,5 +1,7 @@
 """Unit tests for JSON sanitizer, repair, and Pydantic validator."""
 
+import json
+
 from app.schemas.ai import StudyMaterialsResponse
 from app.services.json_repair_service import clean_and_parse_study_json
 
@@ -13,7 +15,7 @@ SAMPLE_VALID_STUDY_DICT = {
         "sections": [
             {
                 "title": "Mitochondria",
-                "content": "Powerhouse of the cell generating ATP through oxidative phosphorylation.",
+                "content": "Powerhouse of the cell generating ATP through respiration.",
                 "key_points": ["Double membrane", "ATP synthesis"],
             }
         ],
@@ -73,9 +75,8 @@ def test_clean_and_parse_pure_json() -> None:
 
 
 def test_clean_and_parse_markdown_fenced_json() -> None:
-    import json
-
-    raw = f"Here is the study material:\n```json\n{json.dumps(SAMPLE_VALID_STUDY_DICT)}\n```\nHope this helps!"
+    dumped = json.dumps(SAMPLE_VALID_STUDY_DICT)
+    raw = f"Here is the study material:\n```json\n{dumped}\n```\nHope this helps!"
     result = clean_and_parse_study_json(raw)
     assert result is not None
     assert result.topic == "Cell Biology"

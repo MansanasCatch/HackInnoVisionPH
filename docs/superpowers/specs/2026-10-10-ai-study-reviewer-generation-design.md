@@ -61,27 +61,33 @@ The enhanced endpoint enables students and teachers to upload diverse study mate
 from typing import Literal
 from pydantic import BaseModel, Field
 
+
 class ReviewerSection(BaseModel):
     title: str = Field(description="Section heading")
     content: str = Field(description="Detailed conceptual explanation")
     key_points: list[str] = Field(default_factory=list, description="Essential key points")
 
+
 class Reviewer(BaseModel):
     title: str = Field(description="Reviewer title")
     sections: list[ReviewerSection] = Field(default_factory=list)
 
+
 class Summary(BaseModel):
     content: str = Field(description="Concise synthesis of core concepts")
+
 
 class KeyNotesItem(BaseModel):
     topic: str = Field(description="Concept or subtopic name")
     notes: list[str] = Field(default_factory=list, description="Organized bullet notes")
+
 
 class Flashcard(BaseModel):
     question: str = Field(description="Question or prompt")
     answer: str = Field(description="Accurate factual answer")
     topic: str = Field(description="Associated subject topic")
     difficulty: Literal["easy", "medium", "hard"] = "medium"
+
 
 class QuizQuestion(BaseModel):
     type: Literal["multiple_choice", "true_false", "identification", "short_answer"]
@@ -91,6 +97,7 @@ class QuizQuestion(BaseModel):
     explanation: str
     topic: str
     difficulty: Literal["easy", "medium", "hard"] = "medium"
+
 
 class ExamQuestion(BaseModel):
     type: Literal["multiple_choice", "true_false", "identification", "short_answer", "essay"]
@@ -102,24 +109,26 @@ class ExamQuestion(BaseModel):
     difficulty: Literal["easy", "medium", "hard"] = "hard"
     points: int = 1
 
+
 class Exam(BaseModel):
     title: str
     questions: list[ExamQuestion]
     total_questions: int
     total_points: int
 
+
 class SourceCoverage(BaseModel):
     covered_topics: list[str] = Field(default_factory=list)
     content_gaps: list[str] = Field(
-        default_factory=list, 
-        description="Explicit gaps identified in source documents instead of hallucinating"
+        default_factory=list,
+        description="Explicit gaps identified in source documents instead of hallucinating",
     )
+
 
 class StudyMaterialsResponse(BaseModel):
     intent: Literal["question", "study_reviewer"] = "study_reviewer"
     direct_answer: str | None = Field(
-        default=None, 
-        description="Immediate direct answer if user asked an ad-hoc question"
+        default=None, description="Immediate direct answer if user asked an ad-hoc question"
     )
     topic: str = Field(description="Selected subject or main topic")
     source_summary: str = Field(description="Brief overview of source materials")
@@ -146,7 +155,7 @@ class AIGenerateResponse(BaseModel):
     study_materials: StudyMaterialsResponse | None = None
     warnings: list[str] = Field(
         default_factory=list,
-        description="User warnings regarding token budgeting, OCR notices, or truncation"
+        description="User warnings regarding token budgeting, OCR notices, or truncation",
     )
 ```
 
