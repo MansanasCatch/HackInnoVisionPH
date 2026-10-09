@@ -330,6 +330,30 @@ Base path: `/api/v1`
 | `POST` | `/ai/generate` | Generate text using active local model for the account |
 | `POST` | `/ai/generate-with-files` | Generate Local AI response grounded by attached file contents (PDF, Word, Excel, Images, CSV, Text) |
 
+### 📚 Learning Resources (Hub & Generation)
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/learning-resources/generate` | End-to-end multi-format ingestion & Local AI generation (creates resource + version with summary, key notes, flashcards, quizzes) |
+| `POST` | `/learning-resources` | Create a learning resource container manually |
+| `GET` | `/learning-resources` | List learning resources for an account with latest version metadata |
+| `GET` | `/learning-resources/{id}` | Get specific learning resource details |
+| `GET` | `/learning-resources/{id}/versions` | List all version snapshots for a resource |
+| `GET` | `/learning-resources/{id}/versions/{version_num}` | Retrieve a specific generated resource version |
+
+### ⏱️ Study Sessions & Answers
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/study-sessions` | Start a study session linked to a learning resource version |
+| `GET` | `/study-sessions` | List completed study sessions for an account |
+| `GET` | `/study-sessions/{id}` | Get study session status, score, and summary |
+| `POST` | `/study-sessions/{id}/answers` | Submit answer per question (tracks correct, hint used, confidence, concept) |
+| `POST` | `/study-sessions/{id}/complete` | Finish study session, compute score, and update mastery |
+
+### 🗺️ Knowledge Map & Mastery
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/knowledge-map` | Fetch concept mastery levels (Mastered, Practicing, Needs Review) computed from recent session answers |
+
 ---
 
 ## 🗄️ Database Migrations
@@ -353,13 +377,22 @@ alembic current
 ---
 
 ## 🧪 Testing & Code Quality
-
+ 
 ```bash
-# Run the complete test suite
+# Backend test suite (55 tests)
 .venv\Scripts\pytest
 
-# Run code style & lint checks
+# Backend code style & lint checks
 .venv\Scripts\ruff check .
+
+# Frontend type checking
+cd frontend && npm run typecheck
+
+# Frontend mapper unit tests (Vitest)
+npm run test
+
+# Frontend production bundle build
+npm run build
 ```
 
 ---
