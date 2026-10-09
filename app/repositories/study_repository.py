@@ -3,9 +3,10 @@
 from collections.abc import Sequence
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app.models.learning_resource import LearningResource, LearningResourceVersion
 from app.models.study import StudyAnswer, StudySession, UserVersionProgress
 
 
@@ -60,6 +61,23 @@ class AbstractStudyRepository(Protocol):
         """List answers from a learner's completed sessions, newest session first."""
         ...
 
+    def lock_resource(self, resource_id: int) -> None:
+        """Serialize completions that could advance the same resource."""
+        ...
+
+    def refresh(self, record: StudySession | LearningResourceVersion) -> None:
+        """Reload a record after acquiring the resource lock."""
+        ...
+
+    def commit(self) -> None:
+        """Commit the completed session and version transition together."""
+        ...
+
+    def rollback(self) -> None:
+        """Cancel an incomplete transition."""
+        ...
+
+
 
 class SqlAlchemyStudyRepository(AbstractStudyRepository):
     """Production study repository backed by SQLAlchemy."""
@@ -103,8 +121,7 @@ class SqlAlchemyStudyRepository(AbstractStudyRepository):
 
     def update_session(self, session: StudySession) -> StudySession:
         self._session.add(session)
-        self._session.commit()
-        self._session.refresh(session)
+        self._session.flush()
         return session
 
     def get_progress(
@@ -118,14 +135,12 @@ class SqlAlchemyStudyRepository(AbstractStudyRepository):
 
     def add_progress(self, progress: UserVersionProgress) -> UserVersionProgress:
         self._session.add(progress)
-        self._session.commit()
-        self._session.refresh(progress)
+        self._session.flush()
         return progress
 
     def update_progress(self, progress: UserVersionProgress) -> UserVersionProgress:
         self._session.add(progress)
-        self._session.commit()
-        self._session.refresh(progress)
+        self._session.flush()
         return progress
 
     def list_completed_sessions(self, *, onboarding_id: int, limit: int) -> Sequence[StudySession]:
@@ -153,3 +168,19 @@ class SqlAlchemyStudyRepository(AbstractStudyRepository):
             .order_by(StudySession.id.desc(), StudyAnswer.id.asc())
         )
         return [(answer, session) for answer, session in self._session.execute(statement).all()]
+
+    def lock_resource(self, resource_id: int) -> None:
+        self._session.execute(
+            update(LearningResource)
+            .where(LearningResource.id == resource_id)
+            .values(updated_at=LearningResource.updated_at)
+        )
+
+    def refresh(self, record: StudySession | LearningResourceVersion) -> None:
+        self._session.refresh(record)
+
+    def commit(self) -> None:
+        self._session.commit()
+
+    def rollback(self) -> None:
+        self._session.rollback()

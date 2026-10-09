@@ -7,6 +7,7 @@ from fastapi import APIRouter, File, Form, Query, UploadFile, status
 from app.api.deps import LearningResourceServiceDep, ResourceGenerationServiceDep
 from app.api.uploads import read_uploads
 from app.schemas.learning_resource import (
+    ArchivedVersionAnalyticsRead,
     GeneratedLearningResource,
     LearningResourceCreate,
     LearningResourceRead,
@@ -108,6 +109,18 @@ def list_learning_resource_versions(
 ) -> list[LearningResourceVersionRead]:
     """Return the latest selectable versions, limited to 3 by default."""
     return service.list_versions(resource_id=resource_id, limit=limit)
+
+
+@router.get(
+    "/{resource_id}/analytics/archived",
+    response_model=list[ArchivedVersionAnalyticsRead],
+    summary="List archived version analytics",
+)
+def list_archived_version_analytics(
+    resource_id: int, service: LearningResourceServiceDep
+) -> list[ArchivedVersionAnalyticsRead]:
+    """Return compact study metrics for removed resource versions."""
+    return service.list_archived_analytics(resource_id)
 
 
 @router.get(

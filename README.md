@@ -330,24 +330,29 @@ Base path: `/api/v1`
 | `POST` | `/ai/generate` | Generate text using active local model for the account |
 | `POST` | `/ai/generate-with-files` | Generate Local AI response grounded by attached file contents (PDF, Word, Excel, Images, CSV, Text) |
 
-### 📚 Learning Resources (Hub & Generation)
+### 📚 Learning Resources (Hub, Generation & Versioning)
 | Method | Path | Description |
 | --- | --- | --- |
 | `POST` | `/learning-resources/generate` | End-to-end multi-format ingestion & Local AI generation (creates resource + version with summary, key notes, flashcards, quizzes) |
-| `POST` | `/learning-resources` | Create a learning resource container manually |
+| `POST` | `/learning-resources` | Create a learner-owned resource container manually |
 | `GET` | `/learning-resources` | List learning resources for an account with latest version metadata |
 | `GET` | `/learning-resources/{id}` | Get specific learning resource details |
-| `GET` | `/learning-resources/{id}/versions` | List all version snapshots for a resource |
-| `GET` | `/learning-resources/{id}/versions/{version_num}` | Retrieve a specific generated resource version |
+| `POST` | `/learning-resources/{resource_id}/versions` | Add a version and retain the latest three full versions |
+| `GET` | `/learning-resources/{resource_id}/versions` | List selectable versions for a resource |
+| `GET` | `/learning-resources/{resource_id}/versions/{version_id}` | Retrieve a specific generated resource version |
+| `GET` | `/learning-resources/{resource_id}/versions/{version_id}/progress` | Check first-time status and progress for one version |
+| `GET` | `/learning-resources/{resource_id}/analytics/archived` | Read compact metrics for archived versions |
 
 ### ⏱️ Study Sessions & Answers
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/study-sessions` | Start a study session linked to a learning resource version |
+| `POST` | `/study-sessions` | Start an attempt against an exact version |
 | `GET` | `/study-sessions` | List completed study sessions for an account |
 | `GET` | `/study-sessions/{id}` | Get study session status, score, and summary |
-| `POST` | `/study-sessions/{id}/answers` | Submit answer per question (tracks correct, hint used, confidence, concept) |
-| `POST` | `/study-sessions/{id}/complete` | Finish study session, compute score, and update mastery |
+| `POST` | `/study-sessions/{session_id}/answers` | Record an answer and concept evidence (tracks correct, hints, confidence) |
+| `POST` | `/study-sessions/{session_id}/complete` | Score the attempt and advance only the current version |
+
+Completing the current version creates a successor with an `adaptive_review` section based on recorded answers. Completing an older version only updates its progress. The completion response includes `new_version_id` and `archived_version_number` when applicable. Repeating completion returns the original result without adding another attempt or version. Before removing an old version, the API preserves its compact score and concept totals for analytics; its full content and answer history are deleted.
 
 ### 🗺️ Knowledge Map & Mastery
 | Method | Path | Description |

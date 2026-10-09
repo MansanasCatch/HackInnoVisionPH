@@ -76,7 +76,10 @@ def _detect_gpu_info() -> tuple[str | None, float]:
         try:
             import winreg
 
-            video_class_path = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
+            video_class_path = (
+                r"SYSTEM\CurrentControlSet\Control\Class"
+                r"\{4d36e968-e325-11ce-bfc1-08002be10318}"
+            )
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, video_class_path) as class_key:
                 # Check subkeys 0000, 0001, 0002 for graphics adapter
                 for subkey_name in ("0000", "0001", "0002"):

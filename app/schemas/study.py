@@ -111,3 +111,5 @@ class StudySessionCompleteResponse(BaseModel):
 
     session: StudySessionRead
     progress: VersionProgressRead
+    new_version_id: int | None = None
+    archived_version_number: int | None = None
