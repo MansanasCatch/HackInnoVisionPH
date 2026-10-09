@@ -125,11 +125,25 @@ Study Mode ──► Load ──► Recalculating ──► Start ──► Scen
 
 ---
 
+## 🛠️ Technology Stack
+
+| Layer | Technologies & Tools |
+| --- | --- |
+| **Backend API** | **FastAPI**, **Python 3.12+**, Uvicorn (ASGI), Pydantic v2 |
+| **Database & ORM** | **SQLite 3**, **SQLAlchemy 2.0** ORM, **Alembic** migrations |
+| **Local AI Engine** | **Ollama** (Local models: `llama3.2:1b`, `llama3.2:3b`, `phi3:mini`, `gemma2:2b`), Psutil |
+| **Frontend UI** | **React 19**, **TypeScript**, **Vite 5**, **TailwindCSS v4**, Single-Page Application (SPA) |
+| **Document Extraction** | PyPDF, python-docx, openpyxl, Pillow, CSV, Plain Text |
+| **Testing & Quality** | Pytest, Pytest-Asyncio, Pytest-Cov, Ruff |
+
+---
+
 ## 🧰 Prerequisites (what to install)
 
 | Tool | Version | Download |
 | --- | --- | --- |
 | **Python** | **3.12 or newer** (tested on Python 3.12/3.14) | https://www.python.org/downloads/ |
+| **Node.js & npm** | **v20 or newer** (for React/Vite frontend development & build) | https://nodejs.org |
 | **Ollama** | **Latest** (for Local AI model execution) | https://ollama.com |
 | **Git** | Latest | https://git-scm.com/downloads |
 | **VS Code** *(recommended)* | Latest | https://code.visualstudio.com/ |
@@ -140,7 +154,8 @@ Verify your installation:
 
 ```bash
 python --version   # Python 3.12+ expected
-pip --version
+node -v            # Node.js v20+ expected
+npm -v
 ollama --version   # (Optional, app can auto-launch Ollama background server)
 ```
 
@@ -164,14 +179,20 @@ python -m venv .venv
 #    macOS / Linux
 source .venv/bin/activate
 
-# 4. Install dependencies
+# 4. Install backend dependencies
 pip install -r requirements.txt
 
-# 5. (Optional) create your local environment file
+# 5. Build the React frontend (compiled output saved to frontend/dist)
+cd frontend
+npm install
+npm run build
+cd ..
+
+# 6. (Optional) create your local environment file
 copy .env.example .env      # Windows
 cp .env.example .env        # macOS / Linux
 
-# 6. Run the app 🎉
+# 7. Run the app 🎉
 python run.py
 ```
 
@@ -206,7 +227,7 @@ python run.py
 
 | URL | Description |
 | --- | --- |
-| http://127.0.0.1:8000 | Welcome Page & Local AI Status |
+| http://127.0.0.1:8000 | Calibrat8 React SPA Frontend |
 | http://127.0.0.1:8000/docs | Interactive OpenAPI documentation (Swagger UI) |
 | http://127.0.0.1:8000/redoc | ReDoc API documentation |
 | http://127.0.0.1:8000/api/v1/health | System & Database Health Endpoint |
@@ -217,8 +238,8 @@ python run.py
 
 ```text
 InnoVisionPH/
-├── app/                          # Backend application (Clean Architecture)
-│   ├── main.py                   # FastAPI app factory, middleware, routes & static mounts
+├── app/                          # Backend application (Clean Architecture & FastAPI)
+│   ├── main.py                   # FastAPI app factory, middleware, routes & React SPA mounts
 │   ├── api/                      # 🌐 Presentation layer (HTTP controllers)
 │   │   ├── deps.py               #    Dependency injection wiring
 │   │   └── v1/
@@ -244,10 +265,14 @@ InnoVisionPH/
 │   │   └── health.py
 │   ├── db/                       # ⚙️ Database engine, session maker & SQLite DB (`innovision.db`)
 │   └── core/                     # 🔧 Configuration (.env), logging & custom exceptions
-├── frontend/                     # Pure HTML / CSS / JS frontend interface
-│   ├── index.html                # Welcome page
-│   ├── css/styles.css            # Custom glassmorphism styles
-│   └── js/app.js                 # Vanilla JS module
+├── frontend/                     # ⚛️ React 19 + TypeScript + TailwindCSS v4 SPA
+│   ├── src/                      #    App components & styles (App.tsx, index.css, main.tsx)
+│   ├── public/                   #    Static assets (favicon.svg, character sheets)
+│   ├── dist/                     #    Production bundle output (compiled via `npm run build`)
+│   ├── index.html                #    Single Page Application entry point
+│   ├── package.json              #    Frontend package definitions & scripts
+│   ├── tsconfig.json             #    TypeScript configuration
+│   └── vite.config.ts            #    Vite 5 build configuration
 ├── migrations/                   # Alembic database migrations
 │   ├── env.py                    # Migration environment connected to app metadata
 │   └── versions/                 # DB schema migration scripts

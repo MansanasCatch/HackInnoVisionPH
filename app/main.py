@@ -49,17 +49,32 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     app.include_router(api_router, prefix=settings.api_v1_prefix)
-    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
-    @app.get("/", include_in_schema=False)
-    def index() -> FileResponse:
-        """Serve the welcome page."""
-        return FileResponse(FRONTEND_DIR / "index.html")
+    dist_dir = FRONTEND_DIR / "dist"
+    frontend_target = dist_dir if (dist_dir / "index.html").exists() else FRONTEND_DIR
+
+    if (frontend_target / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=frontend_target / "assets"), name="dist_assets")
+
+    if (FRONTEND_DIR / "static").exists():
+        app.mount("/static", StaticFiles(directory=FRONTEND_DIR / "static"), name="static")
 
     @app.get("/favicon.ico", include_in_schema=False)
     def favicon() -> FileResponse:
         """Serve the favicon."""
-        return FileResponse(FRONTEND_DIR / "assets" / "favicon.svg", media_type="image/svg+xml")
+        fav = frontend_target / "favicon.svg"
+        if not fav.exists():
+            fav = FRONTEND_DIR / "public" / "favicon.svg"
+        return FileResponse(fav, media_type="image/svg+xml")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def serve_spa(full_path: str) -> FileResponse:
+        """Serve SPA static files or fallback to index.html."""
+        if full_path:
+            file_path = frontend_target / full_path
+            if file_path.is_file():
+                return FileResponse(file_path)
+        return FileResponse(frontend_target / "index.html")
 
     return app
 
