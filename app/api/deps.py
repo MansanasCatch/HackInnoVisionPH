@@ -8,11 +8,15 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.repositories.device_repository import SqlAlchemyDeviceRepository
+from app.repositories.learning_resource_repository import SqlAlchemyLearningResourceRepository
 from app.repositories.onboarding_repository import SqlAlchemyOnboardingRepository
+from app.repositories.study_repository import SqlAlchemyStudyRepository
 from app.services.device_service import DeviceService
 from app.services.health_service import HealthService
+from app.services.learning_resource_service import LearningResourceService
 from app.services.local_ai_service import LocalAIService
 from app.services.onboarding_service import OnboardingService
+from app.services.study_service import StudyService
 
 DbSession = Annotated[Session, Depends(get_db)]
 AppSettings = Annotated[Settings, Depends(get_settings)]
@@ -36,6 +40,23 @@ def get_local_ai_service(db: DbSession) -> LocalAIService:
     return LocalAIService(device_repository=SqlAlchemyDeviceRepository(db))
 
 
+def get_learning_resource_service(db: DbSession) -> LearningResourceService:
+    """Compose a :class:`LearningResourceService` backed by SQLAlchemy."""
+    return LearningResourceService(
+        repository=SqlAlchemyLearningResourceRepository(db),
+        onboarding_repository=SqlAlchemyOnboardingRepository(db),
+    )
+
+
+def get_study_service(db: DbSession) -> StudyService:
+    """Compose a :class:`StudyService` backed by SQLAlchemy."""
+    return StudyService(
+        study_repository=SqlAlchemyStudyRepository(db),
+        learning_repository=SqlAlchemyLearningResourceRepository(db),
+        onboarding_repository=SqlAlchemyOnboardingRepository(db),
+    )
+
+
 def get_health_service(db: DbSession, settings: AppSettings) -> HealthService:
     """Compose a :class:`HealthService`."""
     return HealthService(db, settings)
@@ -44,4 +65,8 @@ def get_health_service(db: DbSession, settings: AppSettings) -> HealthService:
 OnboardingServiceDep = Annotated[OnboardingService, Depends(get_onboarding_service)]
 DeviceServiceDep = Annotated[DeviceService, Depends(get_device_service)]
 LocalAIServiceDep = Annotated[LocalAIService, Depends(get_local_ai_service)]
+LearningResourceServiceDep = Annotated[
+    LearningResourceService, Depends(get_learning_resource_service)
+]
+StudyServiceDep = Annotated[StudyService, Depends(get_study_service)]
 HealthServiceDep = Annotated[HealthService, Depends(get_health_service)]
