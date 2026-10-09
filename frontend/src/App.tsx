@@ -1062,7 +1062,7 @@ function ProfileSetup({ initial, editing, returning, onComplete, onCancel, onRes
       stage += 1;
       setAnalysisStage(Math.min(stage, 3));
       if (stage >= 3) window.clearInterval(interval);
-    }, 450);
+    }, 120);
 
     (async () => {
       try {
@@ -1084,10 +1084,9 @@ function ProfileSetup({ initial, editing, returning, onComplete, onCancel, onRes
         console.warn("Backend device detection fallback:", err);
       } finally {
         if (!cancelled) {
-          // Allow the animation to reach the final step smoothly
           setTimeout(() => {
             if (!cancelled) setAnalysisStage(4);
-          }, 1200);
+          }, 250);
         }
       }
     })();
