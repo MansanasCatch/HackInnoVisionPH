@@ -71,20 +71,37 @@ def _detect_gpu_info() -> tuple[str | None, float]:
     except Exception:
         pass
 
-    # 3. Try Windows WMIC / PowerShell query for display adapters
+    # 3. Try Windows registry for instant zero-overhead GPU lookup
     if os.name == "nt":
         try:
-            cmd = (
-                'powershell -Command "Get-CimInstance Win32_VideoController '
-                '| Select-Name Name,AdapterRAM | ConvertTo-Json"'
+            import winreg
+
+            video_class_path = (
+                r"SYSTEM\CurrentControlSet\Control\Class"
+                r"\{4d36e968-e325-11ce-bfc1-08002be10318}"
             )
-            res = subprocess.check_output(cmd, shell=True, text=True, timeout=3.0).strip()
-            if "NVIDIA" in res or "AMD" in res or "Radeon" in res or "Intel" in res:
-                # Basic check for GPU name
-                for line in res.splitlines():
-                    if '"Name"' in line and ":" in line:
-                        name = line.split(":", 1)[1].replace('"', "").replace(",", "").strip()
-                        return name, 0.0
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, video_class_path) as class_key:
+                # Check subkeys 0000, 0001, 0002 for graphics adapter
+                for subkey_name in ("0000", "0001", "0002"):
+                    try:
+                        with winreg.OpenKey(class_key, subkey_name) as dev_key:
+                            desc, _ = winreg.QueryValueEx(dev_key, "DriverDesc")
+                            if desc and isinstance(desc, str):
+                                return desc.strip(), 0.0
+                    except OSError:
+                        continue
+        except Exception:
+            pass
+
+        # 4. Fallback to PowerShell if registry lookup fails
+        try:
+            cmd = (
+                'powershell -NoProfile -Command "Get-CimInstance Win32_VideoController '
+                '| Select-Object -ExpandProperty Name"'
+            )
+            res = subprocess.check_output(cmd, shell=True, text=True, timeout=1.5).strip()
+            if res:
+                return res.splitlines()[0].strip(), 0.0
         except Exception:
             pass
 

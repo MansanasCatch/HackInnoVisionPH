@@ -1,6 +1,8 @@
 """Endpoints for version-aware study sessions."""
 
-from fastapi import APIRouter, status
+from typing import Annotated
+
+from fastapi import APIRouter, Query, status
 
 from app.api.deps import StudyServiceDep
 from app.schemas.study import (
@@ -27,6 +29,20 @@ def start_study_session(
 ) -> StudySessionRead:
     """Start a study session for one exact learning resource version."""
     return service.start_session(payload)
+
+
+@router.get(
+    "",
+    response_model=list[StudySessionRead],
+    summary="List completed study sessions for a learner",
+)
+def list_study_sessions(
+    service: StudyServiceDep,
+    onboarding_id: Annotated[int, Query(ge=1)],
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+) -> list[StudySessionRead]:
+    """Completed sessions, newest first. Used by reports and the weekly chart."""
+    return service.list_sessions(onboarding_id=onboarding_id, limit=limit)
 
 
 @router.get(

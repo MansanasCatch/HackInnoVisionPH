@@ -153,6 +153,7 @@ class LocalAIService:
                         f"Model '{target_model}' output unparseable or error: "
                         f"{raw_output[:60]}"
                     ),
+                    notes_context=request.text_context,
                 )
                 warnings.append(
                     f"Notice: Model '{target_model}' did not return valid JSON. "
@@ -169,10 +170,11 @@ class LocalAIService:
                 intent=intent,
                 documents=ingested_files,
                 warning_msg="Local Ollama server offline",
+                notes_context=request.text_context,
             )
             warnings.append(
                 "Local Ollama server is offline. "
-                "Deterministic study reviewer generated from uploaded files."
+                "Deterministic study reviewer generated from your material."
             )
 
         elapsed = round(time.monotonic() - start_time, 3)

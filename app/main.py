@@ -71,6 +71,11 @@ def create_app() -> FastAPI:
     def serve_spa(full_path: str) -> FileResponse:
         """Serve SPA static files or fallback to index.html."""
         if full_path:
+            # Never return index.html for API requests to avoid confusing client JSON parsers
+            if full_path.startswith("api/") or full_path == "api":
+                from fastapi import HTTPException
+                raise HTTPException(status_code=404, detail=f"API endpoint not found: /{full_path}")
+
             file_path = frontend_target / full_path
             if file_path.is_file():
                 return FileResponse(file_path)

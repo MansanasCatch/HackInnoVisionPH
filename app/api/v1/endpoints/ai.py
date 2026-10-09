@@ -2,15 +2,14 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, UploadFile
 
 from app.api.deps import LocalAIServiceDep
+from app.api.uploads import read_uploads
 from app.schemas.ai import (
     AIGenerateRequest,
     AIGenerateResponse,
 )
-
-MAX_TOTAL_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
 
 router = APIRouter(prefix="/ai", tags=["Local AI & File Ingestion"])
 
@@ -55,6 +54,9 @@ async def generate_with_files(
     onboarding_id: Annotated[int | None, Form(description="Onboarding account ID")] = None,
     model_override: Annotated[str | None, Form(description="Optional model tag override")] = None,
     system_prompt: Annotated[str | None, Form(description="Optional system prompt")] = None,
+    text_context: Annotated[
+        str | None, Form(description="Free-text notes the learner typed or pasted")
+    ] = None,
     temperature: Annotated[float, Form(description="Temperature sampling")] = 0.7,
     max_tokens: Annotated[int, Form(description="Max generation tokens")] = 2048,
     files: Annotated[
@@ -63,21 +65,7 @@ async def generate_with_files(
     ] = None,
 ) -> AIGenerateResponse:
     """Generate Local AI response grounded by attached file contents."""
-    uploaded_files: list[tuple[str, bytes, str | None]] = []
-    total_bytes = 0
-
-    if files:
-        file_list = files if isinstance(files, list) else [files]
-        for f in file_list:
-            if f and f.filename:
-                content = await f.read()
-                total_bytes += len(content)
-                if total_bytes > MAX_TOTAL_FILE_SIZE_BYTES:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Total uploaded files exceed the 25 MB limit.",
-                    )
-                uploaded_files.append((f.filename, content, f.content_type))
+    uploaded_files = await read_uploads(files)
 
     req = AIGenerateRequest(
         prompt=prompt,
@@ -85,6 +73,7 @@ async def generate_with_files(
         onboarding_id=onboarding_id,
         model_override=model_override,
         system_prompt=system_prompt,
+        text_context=text_context,
         temperature=temperature,
         max_tokens=max_tokens,
     )
