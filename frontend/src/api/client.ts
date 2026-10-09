@@ -89,13 +89,24 @@ export const api = {
     return handleResponse<DeviceSpecs>(res);
   },
 
-  async getDeviceSuggestions(specs: DeviceSpecs): Promise<DeviceSuggestions> {
-    const res = await fetch(`${BASE_URL}/device/suggestions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(specs),
-    });
-    return handleResponse<DeviceSuggestions>(res);
+  async getDeviceSuggestions(specs?: DeviceSpecs | null): Promise<DeviceSuggestions> {
+    const params = new URLSearchParams();
+    if (specs?.ram_gb) params.append("ram_gb", String(specs.ram_gb));
+    if (specs?.vram_gb) params.append("vram_gb", String(specs.vram_gb));
+    if (specs?.gpu_name) params.append("gpu_name", specs.gpu_name);
+    const queryString = params.toString() ? `?${params.toString()}` : "";
+    const res = await fetch(`${BASE_URL}/device/suggestions${queryString}`);
+    const data = await handleResponse<any>(res);
+
+    // Normalize backend ModelSuggestionsResponse to frontend DeviceSuggestions format
+    return {
+      hardware_tier: data.recommended_model || "Balanced",
+      recommended_models: data.models?.map((m: any) => m.model_name) || ["llama3.2:1b"],
+      max_model_size_b: 3.8,
+      warning_notes: [],
+      is_hardware_supported: true,
+      is_gpu_recommended: Boolean(specs?.gpu_available),
+    };
   },
 
   async saveDeviceSpecs(specs: DeviceSpecs): Promise<DeviceSpecs> {

@@ -1056,10 +1056,13 @@ function ProfileSetup({ initial, editing, returning, onComplete, onCancel, onRes
   useEffect(() => {
     if (step !== 2) return;
     setAnalysisStage(0);
-    let cancelled = false;
-
-    const timer1 = window.setTimeout(() => { if (!cancelled) setAnalysisStage(1); }, 300);
-    const timer2 = window.setTimeout(() => { if (!cancelled) setAnalysisStage(2); }, 700);
+    let stage = 0;
+    const interval = window.setInterval(() => {
+      if (cancelled) return;
+      stage += 1;
+      setAnalysisStage(Math.min(stage, 3));
+      if (stage >= 3) window.clearInterval(interval);
+    }, 450);
 
     (async () => {
       try {
@@ -1067,7 +1070,6 @@ function ProfileSetup({ initial, editing, returning, onComplete, onCancel, onRes
         if (cancelled) return;
         setDetectedSpecs(specs);
         setDetectedCores(specs.cpu_cores);
-        setAnalysisStage(3);
 
         const suggestions = await api.getDeviceSuggestions(specs);
         if (cancelled) return;
@@ -1078,18 +1080,21 @@ function ProfileSetup({ initial, editing, returning, onComplete, onCancel, onRes
           deviceMemory: `${specs.ram_gb} GB`,
           modelPreference: current.modelPreference || suggestions.recommended_models[0] || "llama3.2:1b",
         }));
-        setAnalysisStage(4);
       } catch (err) {
         console.warn("Backend device detection fallback:", err);
-        if (cancelled) return;
-        setAnalysisStage(4);
+      } finally {
+        if (!cancelled) {
+          // Allow the animation to reach the final step smoothly
+          setTimeout(() => {
+            if (!cancelled) setAnalysisStage(4);
+          }, 1200);
+        }
       }
     })();
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timer1);
-      window.clearTimeout(timer2);
+      window.clearInterval(interval);
     };
   }, [step]);
   useEffect(() => {
