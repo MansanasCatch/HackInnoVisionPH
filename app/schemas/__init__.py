@@ -1,8 +1,8 @@
 from app.schemas.health import HealthRead
-from app.schemas.project import (
-    ProjectCreate,
-    ProjectRead,
-    ProjectStats,
+from app.schemas.onboarding import (
+    OnboardingCreate,
+    OnboardingRead,
+    OnboardingUpdate,
 )
 
-__all__ = ["HealthRead", "ProjectCreate", "ProjectRead", "ProjectStats"]
+__all__ = ["HealthRead", "OnboardingCreate", "OnboardingRead", "OnboardingUpdate"]
