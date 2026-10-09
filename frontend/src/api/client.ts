@@ -30,18 +30,29 @@ class ApiError extends Error {
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
+  const contentType = res.headers.get("content-type") || "";
   if (!res.ok) {
     let errBody: any = null;
-    try {
-      errBody = await res.json();
-    } catch {
+    if (contentType.includes("application/json")) {
+      try {
+        errBody = await res.json();
+      } catch {
+        errBody = await res.text();
+      }
+    } else {
       errBody = await res.text();
     }
     const message =
       (errBody && typeof errBody === "object" && (errBody.detail || errBody.message)) ||
-      `HTTP error ${res.status}`;
+      (typeof errBody === "string" && !errBody.startsWith("<!") ? errBody : `HTTP error ${res.status}`);
     throw new ApiError(message, res.status, errBody);
   }
+
+  if (!contentType.includes("application/json")) {
+    const text = await res.text();
+    throw new ApiError(`Expected JSON but got ${contentType || "HTML"} from server`, res.status, text);
+  }
+
   return res.json() as Promise<T>;
 }
 

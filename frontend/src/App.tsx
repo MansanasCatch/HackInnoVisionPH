@@ -1056,6 +1056,7 @@ function ProfileSetup({ initial, editing, returning, onComplete, onCancel, onRes
   useEffect(() => {
     if (step !== 2) return;
     setAnalysisStage(0);
+    let cancelled = false;
     let stage = 0;
     const interval = window.setInterval(() => {
       if (cancelled) return;
