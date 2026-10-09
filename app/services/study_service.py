@@ -1,7 +1,13 @@
 """Use cases for version-aware study sessions and progress updates."""
 
-from app.core.exceptions import NotFoundError
+from collections.abc import Sequence
+from copy import deepcopy
+
+from sqlalchemy.exc import IntegrityError
+
+from app.core.exceptions import ConflictError, NotFoundError
 from app.db.base import utc_now
+from app.models.learning_resource import LearningResourceVersion
 from app.models.study import StudyAnswer, StudySession, UserVersionProgress
 from app.repositories.learning_resource_repository import AbstractLearningResourceRepository
 from app.repositories.onboarding_repository import AbstractOnboardingRepository
@@ -57,7 +63,9 @@ class StudyService:
 
     def add_answer(self, session_id: int, payload: StudyAnswerCreate) -> StudyAnswerRead:
         """Record one answer in a study session."""
-        self._get_session_or_raise(session_id)
+        session = self._get_session_or_raise(session_id)
+        if session.completed_at is not None:
+            raise ConflictError("Cannot add answers to a completed study session.")
         answer = StudyAnswer(
             study_session_id=session_id,
             question_id=payload.question_id,
@@ -76,35 +84,112 @@ class StudyService:
     def complete_session(
         self, session_id: int, payload: StudySessionComplete
     ) -> StudySessionCompleteResponse:
-        """Complete a session, score it, and update version progress."""
+        """Complete a session and advance only the current resource version."""
         session = self._get_session_or_raise(session_id)
-        answers = self._study_repo.list_answers(session_id)
+        version = self._learning_repo.get_version(session.resource_version_id)
+        if version is None:
+            raise NotFoundError("The session's learning resource version was removed.")
 
-        total_items = payload.total_items
-        if total_items is None:
-            total_items = len(answers)
+        try:
+            self._study_repo.lock_resource(version.learning_resource_id)
+            self._study_repo.refresh(session)
+            version = self._learning_repo.get_version(session.resource_version_id)
+            if version is None:
+                raise NotFoundError("The session's learning resource version was removed.")
+            self._study_repo.refresh(version)
+            if session.completed_at is not None:
+                progress = self._study_repo.get_progress(
+                    onboarding_id=session.onboarding_id,
+                    resource_version_id=session.resource_version_id,
+                )
+                if progress is None:
+                    raise ConflictError("Completed session has no progress record.")
+                result = StudySessionCompleteResponse(
+                    session=StudySessionRead.model_validate(session),
+                    progress=self._progress_read(progress),
+                    new_version_id=session.generated_version_id,
+                    archived_version_number=session.archived_version_number,
+                )
+                self._study_repo.commit()
+                return result
 
-        correct_items = payload.correct_items
-        if correct_items is None:
-            correct_items = sum(1 for answer in answers if answer.is_correct)
+            answers = self._study_repo.list_answers(session_id)
+            total_items = payload.total_items if payload.total_items is not None else len(answers)
+            correct_items = (
+                payload.correct_items
+                if payload.correct_items is not None
+                else sum(1 for answer in answers if answer.is_correct)
+            )
+            if correct_items > total_items:
+                raise ConflictError("Correct items cannot exceed total items.")
 
-        accuracy = (correct_items / total_items * 100) if total_items else 0.0
-        completed_at = utc_now()
+            session.score = payload.score
+            session.total_items = total_items
+            session.correct_items = correct_items
+            session.accuracy = round(correct_items / total_items * 100, 2) if total_items else 0.0
+            session.time_spent_seconds = payload.time_spent_seconds
+            session.completed_at = utc_now()
+            self._study_repo.update_session(session)
+            progress = self._upsert_progress(session)
 
-        session.score = payload.score
-        session.total_items = total_items
-        session.correct_items = correct_items
-        session.accuracy = round(accuracy, 2)
-        session.time_spent_seconds = payload.time_spent_seconds
-        session.completed_at = completed_at
-        saved_session = self._study_repo.update_session(session)
+            if version.is_current:
+                number = self._learning_repo.next_version_number(version.learning_resource_id)
+                successor = LearningResourceVersion(
+                    learning_resource_id=version.learning_resource_id,
+                    version_number=number,
+                    title=f"{version.learning_resource.title} v{number}",
+                    summary=version.summary,
+                    content=self._next_version_content(version, session, answers),
+                    resource_types=list(version.resource_types),
+                    topics=list(version.topics),
+                    is_current=True,
+                )
+                saved, archived = self._learning_repo.create_version(successor, commit=False)
+                session.generated_version_id = saved.id
+                session.archived_version_number = archived[0] if archived else None
+                self._study_repo.update_session(session)
 
-        progress = self._upsert_progress(saved_session)
+            result = StudySessionCompleteResponse(
+                session=StudySessionRead.model_validate(session),
+                progress=progress,
+                new_version_id=session.generated_version_id,
+                archived_version_number=session.archived_version_number,
+            )
+            self._study_repo.commit()
+            return result
+        except IntegrityError as exc:
+            self._study_repo.rollback()
+            raise ConflictError(
+                "Resource version changed during completion; retry the request."
+            ) from exc
+        except Exception:
+            self._study_repo.rollback()
+            raise
 
-        return StudySessionCompleteResponse(
-            session=StudySessionRead.model_validate(saved_session),
-            progress=progress,
-        )
+    @staticmethod
+    def _next_version_content(
+        version: LearningResourceVersion, session: StudySession, answers: Sequence[StudyAnswer]
+    ) -> dict:
+        content = deepcopy(version.content)
+        missed: dict[str, dict] = {}
+        for answer in answers:
+            if not answer.is_correct:
+                missed.setdefault(
+                    answer.concept_id,
+                    {
+                        "concept_id": answer.concept_id,
+                        "concept_name": answer.concept_name,
+                        "review_answer": answer.correct_answer,
+                    },
+                )
+        content["adaptive_review"] = {
+            "based_on_version": version.version_number,
+            "based_on_session_id": session.id,
+            "score": session.score,
+            "accuracy": session.accuracy,
+            "priority_concepts": list(missed.values()),
+        }
+        return content
 
     def _upsert_progress(self, session: StudySession) -> VersionProgressRead:
         progress = self._study_repo.get_progress(
@@ -139,6 +224,10 @@ class StudyService:
             progress.mastery_state = self._mastery_state_for_accuracy(session.accuracy)
             saved = self._study_repo.update_progress(progress)
 
+        return self._progress_read(saved)
+
+    @staticmethod
+    def _progress_read(saved: UserVersionProgress) -> VersionProgressRead:
         return VersionProgressRead(
             onboarding_id=saved.onboarding_id,
             resource_version_id=saved.resource_version_id,

@@ -2,7 +2,17 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, utc_now
@@ -39,6 +49,8 @@ class StudySession(Base, TimestampMixin):
     accuracy: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     time_spent_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     first_time_for_version: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    generated_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    archived_version_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     resource_version: Mapped[LearningResourceVersion] = relationship(
         "LearningResourceVersion",
@@ -128,3 +140,30 @@ class UserVersionProgress(Base, TimestampMixin):
             "<UserVersionProgress "
             f"onboarding_id={self.onboarding_id} version_id={self.resource_version_id}>"
         )
+
+
+class ArchivedVersionAnalytics(Base, TimestampMixin):
+    """Compact metrics retained after a full resource version is removed."""
+
+    __tablename__ = "archived_version_analytics"
+    __table_args__ = (
+        UniqueConstraint(
+            "learning_resource_id", "version_number", name="uq_archived_analytics_resource_version"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    learning_resource_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("learning_resources.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    onboarding_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("onboardings.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    attempts_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_items: Mapped[int] = mapped_column(Integer, nullable=False)
+    correct_items: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_time_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    best_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    latest_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    concept_stats: Mapped[list[dict]] = mapped_column(JSON, nullable=False)

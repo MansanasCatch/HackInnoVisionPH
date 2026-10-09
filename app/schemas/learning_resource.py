@@ -86,3 +86,19 @@ class VersionProgressRead(BaseModel):
     mastery_state: str = "new"
     first_started_at: datetime | None = None
     last_studied_at: datetime | None = None
+
+
+class ArchivedVersionAnalyticsRead(BaseModel):
+    """Compact metrics for a version no longer available to study."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    learning_resource_id: int
+    version_number: int
+    attempts_count: int
+    total_items: int
+    correct_items: int
+    total_time_seconds: int
+    best_score: int | None
+    latest_score: int | None
+    concept_stats: list[dict[str, Any]]
