@@ -50,6 +50,16 @@ class AbstractStudyRepository(Protocol):
         """Persist changes to a progress record."""
         ...
 
+    def list_completed_sessions(self, *, onboarding_id: int, limit: int) -> Sequence[StudySession]:
+        """List a learner's completed sessions, newest first."""
+        ...
+
+    def list_answers_with_sessions(
+        self, *, onboarding_id: int
+    ) -> Sequence[tuple[StudyAnswer, StudySession]]:
+        """List answers from a learner's completed sessions, newest session first."""
+        ...
+
 
 class SqlAlchemyStudyRepository(AbstractStudyRepository):
     """Production study repository backed by SQLAlchemy."""
@@ -117,3 +127,29 @@ class SqlAlchemyStudyRepository(AbstractStudyRepository):
         self._session.commit()
         self._session.refresh(progress)
         return progress
+
+    def list_completed_sessions(self, *, onboarding_id: int, limit: int) -> Sequence[StudySession]:
+        statement = (
+            select(StudySession)
+            .where(
+                StudySession.onboarding_id == onboarding_id,
+                StudySession.completed_at.is_not(None),
+            )
+            .order_by(StudySession.completed_at.desc(), StudySession.id.desc())
+            .limit(limit)
+        )
+        return self._session.scalars(statement).all()
+
+    def list_answers_with_sessions(
+        self, *, onboarding_id: int
+    ) -> Sequence[tuple[StudyAnswer, StudySession]]:
+        statement = (
+            select(StudyAnswer, StudySession)
+            .join(StudySession, StudyAnswer.study_session_id == StudySession.id)
+            .where(
+                StudySession.onboarding_id == onboarding_id,
+                StudySession.completed_at.is_not(None),
+            )
+            .order_by(StudySession.id.desc(), StudyAnswer.id.asc())
+        )
+        return [(answer, session) for answer, session in self._session.execute(statement).all()]

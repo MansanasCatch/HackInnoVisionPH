@@ -2,19 +2,46 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, File, Form, Query, UploadFile, status
 
-from app.api.deps import LearningResourceServiceDep
+from app.api.deps import LearningResourceServiceDep, ResourceGenerationServiceDep
+from app.api.uploads import read_uploads
 from app.schemas.learning_resource import (
+    GeneratedLearningResource,
     LearningResourceCreate,
     LearningResourceRead,
     LearningResourceVersionCreate,
     LearningResourceVersionRead,
+    StudyResourceType,
     VersionProgressRead,
 )
 
 router = APIRouter(prefix="/learning-resources", tags=["Learning Resources"])
 
+
+@router.post(
+    "/generate",
+    response_model=GeneratedLearningResource,
+    status_code=status.HTTP_201_CREATED,
+    summary="Generate study materials from a topic, notes and files and save them",
+)
+async def generate_learning_resource(
+    service: ResourceGenerationServiceDep,
+    onboarding_id: Annotated[int, Form(ge=1)],
+    topic: Annotated[str, Form()],
+    notes: Annotated[str, Form()] = "",
+    resource_types: Annotated[list[StudyResourceType] | None, Form()] = None,
+    files: Annotated[list[UploadFile] | None, File()] = None,
+) -> GeneratedLearningResource:
+    """Generate study materials and persist them as a learning resource version."""
+    uploaded = await read_uploads(files)
+    return service.generate(
+        onboarding_id=onboarding_id,
+        topic=topic,
+        notes=notes,
+        resource_types=resource_types,
+        uploaded_files=uploaded,
+    )
 
 @router.post(
     "",

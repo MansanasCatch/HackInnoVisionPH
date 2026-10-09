@@ -140,3 +140,35 @@ def test_study_session_tracks_first_time_answers_and_progress(
     )
     assert separate_version_session.status_code == 201
     assert separate_version_session.json()["first_time_for_version"] is True
+
+
+def test_list_study_sessions_returns_completed_sessions_newest_first(client: TestClient) -> None:
+    onboarding_id = _create_profile(client)
+    resource_id = _create_resource(client, onboarding_id)
+    version_id = _create_version(client, resource_id, "Version 1")
+
+    for score in (1, 2):
+        session_id = client.post(
+            "/api/v1/study-sessions",
+            json={"onboarding_id": onboarding_id, "resource_version_id": version_id},
+        ).json()["id"]
+        client.post(
+            f"/api/v1/study-sessions/{session_id}/complete",
+            json={"score": score, "total_items": 2},
+        )
+    # an unfinished session must not appear in reports
+    client.post(
+        "/api/v1/study-sessions",
+        json={"onboarding_id": onboarding_id, "resource_version_id": version_id},
+    )
+
+    response = client.get("/api/v1/study-sessions", params={"onboarding_id": onboarding_id})
+    assert response.status_code == 200
+    sessions = response.json()
+    assert [session["score"] for session in sessions] == [2, 1]
+    assert all(session["completed_at"] is not None for session in sessions)
+
+
+def test_list_study_sessions_unknown_learner_returns_404(client: TestClient) -> None:
+    response = client.get("/api/v1/study-sessions", params={"onboarding_id": 9999})
+    assert response.status_code == 404

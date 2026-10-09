@@ -212,12 +212,16 @@ def build_offline_fallback_study_materials(
     intent: Literal["question", "study_reviewer"],
     documents: list[ExtractedFileContent],
     warning_msg: str,
+    notes_context: str | None = None,
 ) -> StudyMaterialsResponse:
     """Generate a deterministic, structured study materials tree from extracted document text."""
     resolved_topic = infer_topic_from_documents(topic, documents)
 
-    # Concatenate text from documents
-    all_text = " ".join(doc.extracted_text for doc in documents).strip()
+    # Concatenate text from documents and any typed notes
+    source_parts = [doc.extracted_text for doc in documents]
+    if notes_context and notes_context.strip():
+        source_parts.append(notes_context)
+    all_text = " ".join(source_parts).strip()
     sentences = [s.strip() for s in re.split(r"[.\n]", all_text) if len(s.strip()) > 15]
 
     sample_summary = (

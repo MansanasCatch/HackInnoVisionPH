@@ -39,6 +39,12 @@ def db_session(engine: Engine) -> Iterator[Session]:
         session.close()
 
 
+@pytest.fixture(autouse=True)
+def offline_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep tests deterministic and fast: never call a real local Ollama server."""
+    monkeypatch.setattr("app.services.local_ai_service.is_ollama_reachable", lambda: False)
+
+
 @pytest.fixture
 def client(db_session: Session) -> Iterator[TestClient]:
     """FastAPI test client using the in-memory database."""

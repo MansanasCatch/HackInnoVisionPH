@@ -86,3 +86,21 @@ class VersionProgressRead(BaseModel):
     mastery_state: str = "new"
     first_started_at: datetime | None = None
     last_studied_at: datetime | None = None
+
+
+class GenerationInfo(BaseModel):
+    """Metadata about how study materials were generated."""
+
+    model_used: str = ""
+    is_ollama_online: bool = False
+    execution_time_seconds: float = 0.0
+    warnings: list[str] = Field(default_factory=list)
+
+
+class GeneratedLearningResource(BaseModel):
+    """Result of generating and persisting a learning resource from user material."""
+
+    resource: LearningResourceRead
+    version: LearningResourceVersionRead
+    generation: GenerationInfo
+
