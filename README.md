@@ -226,6 +226,7 @@ InnoVisionPH/
 
 Base path: `/api/v1`
 
+### 👤 Onboarding
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/health` | API liveness and database connectivity status |
@@ -234,6 +235,17 @@ Base path: `/api/v1`
 | `GET` | `/onboarding/{id}` | Get onboarding profile by ID |
 | `GET` | `/onboarding/user/{username}` | Get onboarding profile by Username |
 | `PUT` | `/onboarding/{id}` | Update onboarding profile |
+
+### 💻 Device Specs Setup & Local AI Models
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/device/detect` | Auto-detect host machine hardware specs (RAM, GPU, VRAM, CPU, storage, OS) |
+| `GET` | `/device/suggestions` | Get local AI model options with specific hardware applicability reasons |
+| `POST` | `/device` | Save hardware specs setup linked to an onboarding account (`onboarding_id`) |
+| `GET` | `/device/account/{onboarding_id}` | Fetch device specs & selected model for an account |
+| `POST` | `/device/select-model` | Switch active local AI model at runtime & trigger Ollama background auto-pull |
+| `GET` | `/device/active-model` | Fetch active local AI model configured for AI generation tasks |
+| `GET` | `/device/ollama/models` | List installed Ollama models and check local Ollama server connection |
 
 ---
 

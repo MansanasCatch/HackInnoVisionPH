@@ -1,11 +1,14 @@
 """ORM model for user onboarding profiles."""
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.device import DeviceSpecs
 
 
 class OnboardingProfile(Base, TimestampMixin):
@@ -17,6 +20,10 @@ class OnboardingProfile(Base, TimestampMixin):
     username: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     interests: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     age: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    device_specs: Mapped["DeviceSpecs | None"] = relationship(
+        "DeviceSpecs", back_populates="onboarding", uselist=False, cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<OnboardingProfile id={self.id} username={self.username!r} age={self.age}>"

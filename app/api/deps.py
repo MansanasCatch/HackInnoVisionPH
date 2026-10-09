@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
+from app.repositories.device_repository import SqlAlchemyDeviceRepository
 from app.repositories.onboarding_repository import SqlAlchemyOnboardingRepository
+from app.services.device_service import DeviceService
 from app.services.health_service import HealthService
 from app.services.onboarding_service import OnboardingService
 
@@ -20,10 +22,19 @@ def get_onboarding_service(db: DbSession) -> OnboardingService:
     return OnboardingService(SqlAlchemyOnboardingRepository(db))
 
 
+def get_device_service(db: DbSession) -> DeviceService:
+    """Compose a :class:`DeviceService` backed by SQLAlchemy."""
+    return DeviceService(
+        device_repository=SqlAlchemyDeviceRepository(db),
+        onboarding_repository=SqlAlchemyOnboardingRepository(db),
+    )
+
+
 def get_health_service(db: DbSession, settings: AppSettings) -> HealthService:
     """Compose a :class:`HealthService`."""
     return HealthService(db, settings)
 
 
 OnboardingServiceDep = Annotated[OnboardingService, Depends(get_onboarding_service)]
+DeviceServiceDep = Annotated[DeviceService, Depends(get_device_service)]
 HealthServiceDep = Annotated[HealthService, Depends(get_health_service)]
