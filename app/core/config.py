@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = Field(default=8000, ge=1, le=65535)
 
-    database_url: str = f"sqlite:///{(BASE_DIR / 'innovision.db').as_posix()}"
+    database_url: str = f"sqlite:///{(BASE_DIR / 'app' / 'db' / 'innovision.db').as_posix()}"
     database_echo: bool = False
 
     cors_origins: list[str] = ["http://127.0.0.1:8000", "http://localhost:8000"]

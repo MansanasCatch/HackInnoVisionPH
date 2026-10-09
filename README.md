@@ -130,7 +130,7 @@ InnoVisionPH/
 │   ├── schemas/                  # 📦 Pydantic schemas (Request / response contracts)
 │   │   ├── project.py
 │   │   └── health.py
-│   ├── db/                       # ⚙️ Database engine, session maker & declarative base
+│   ├── db/                       # ⚙️ Database engine, session maker, declarative base & SQLite DB (`innovision.db`)
 │   └── core/                     # 🔧 Configuration (.env), logging & custom exceptions
 ├── frontend/                     # Pure HTML / CSS / JS (No external JS frameworks)
 │   ├── index.html                # Welcome page (message, countdown, DB indicator)
@@ -189,7 +189,7 @@ Base path: `/api/v1`
 
 ## 🗄️ Database Migrations
 
-SQLite is enabled by default (`innovision.db` in project root). Migrations are powered by **Alembic**.
+SQLite is enabled by default (`app/db/innovision.db`). Migrations are powered by **Alembic**.
 
 ```bash
 # Apply pending migrations (executed automatically by run.py)
@@ -288,7 +288,7 @@ Example: adding a `Team` resource.
 | `python` not recognized | Reinstall Python with **Add python.exe to PATH** checked, or run with `py` on Windows |
 | Cannot activate venv in PowerShell | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
 | Port 8000 occupied | `python run.py` automatically terminates existing listeners; or specify a custom port: `python run.py --port 9000` |
-| Reset database | Delete `innovision.db` and start `python run.py` (migrations re-create tables and seeds automatically) |
+| Reset database | Delete `app/db/innovision.db` and start `python run.py` (migrations re-create tables and seeds automatically) |
 | `Unable to copy ...venvlauncher.exe` | The `.venv` is in use by a running process. Stop any running server (`Ctrl+C`) before recreating the virtual environment |
 
 ---
