@@ -11,6 +11,7 @@ from app.repositories.device_repository import SqlAlchemyDeviceRepository
 from app.repositories.onboarding_repository import SqlAlchemyOnboardingRepository
 from app.services.device_service import DeviceService
 from app.services.health_service import HealthService
+from app.services.local_ai_service import LocalAIService
 from app.services.onboarding_service import OnboardingService
 
 DbSession = Annotated[Session, Depends(get_db)]
@@ -30,6 +31,11 @@ def get_device_service(db: DbSession) -> DeviceService:
     )
 
 
+def get_local_ai_service(db: DbSession) -> LocalAIService:
+    """Compose a :class:`LocalAIService` backed by SQLAlchemy DeviceRepository."""
+    return LocalAIService(device_repository=SqlAlchemyDeviceRepository(db))
+
+
 def get_health_service(db: DbSession, settings: AppSettings) -> HealthService:
     """Compose a :class:`HealthService`."""
     return HealthService(db, settings)
@@ -37,4 +43,5 @@ def get_health_service(db: DbSession, settings: AppSettings) -> HealthService:
 
 OnboardingServiceDep = Annotated[OnboardingService, Depends(get_onboarding_service)]
 DeviceServiceDep = Annotated[DeviceService, Depends(get_device_service)]
+LocalAIServiceDep = Annotated[LocalAIService, Depends(get_local_ai_service)]
 HealthServiceDep = Annotated[HealthService, Depends(get_health_service)]

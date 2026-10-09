@@ -40,7 +40,9 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_device_specs")),
     )
-    op.create_index(op.f("ix_device_specs_onboarding_id"), "device_specs", ["onboarding_id"], unique=True)
+    op.create_index(
+        op.f("ix_device_specs_onboarding_id"), "device_specs", ["onboarding_id"], unique=True
+    )
 
 
 def downgrade() -> None:

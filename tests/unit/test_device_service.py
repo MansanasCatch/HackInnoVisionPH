@@ -1,6 +1,6 @@
 """Unit tests for DeviceService and model recommendation engine."""
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import pytest
 
@@ -82,12 +82,14 @@ def test_model_recommendations_reasons() -> None:
     # Test low spec hardware
     res_low = recommend_models_for_hardware(ram_gb=4.0, vram_gb=0.0)
     assert res_low.recommended_model == "qwen2.5:0.5b"
-    assert any("Fits comfortably" in m.reason for m in res_low.models if m.model_name == "qwen2.5:0.5b")
+    assert any(
+        "Fits" in m.reason for m in res_low.models if m.model_name == "qwen2.5:0.5b"
+    )
 
     # Test high spec hardware
     res_high = recommend_models_for_hardware(ram_gb=16.0, vram_gb=6.0, gpu_name="RTX 3060")
     assert res_high.recommended_model == "llama3.2:3b"
-    assert any("hardware acceleration" in m.reason for m in res_high.models if m.is_recommended)
+    assert any("Fits in dedicated VRAM" in m.reason for m in res_high.models if m.is_recommended)
 
 
 def test_create_device_specs_setup(device_service: DeviceService) -> None:

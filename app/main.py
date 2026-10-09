@@ -12,6 +12,7 @@ from app.api.v1.router import api_router
 from app.core.config import FRONTEND_DIR, get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
+from app.services.ollama_service import ensure_ollama_started
 
 logger = get_logger(__name__)
 
@@ -20,6 +21,8 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Run start-up and shutdown hooks."""
     logger.info("%s v%s is starting", app.title, app.version)
+    # Auto-start Ollama local AI server if available
+    ensure_ollama_started()
     yield
     logger.info("%s is shutting down", app.title)
 

@@ -58,6 +58,8 @@ class SqlAlchemyDeviceRepository(AbstractDeviceRepository):
         return device
 
     def get_latest_active_model(self) -> str:
-        statement = select(DeviceSpecs.selected_model).order_by(DeviceSpecs.updated_at.desc()).limit(1)
+        statement = (
+            select(DeviceSpecs.selected_model).order_by(DeviceSpecs.updated_at.desc()).limit(1)
+        )
         res = self._session.scalars(statement).first()
         return res if res else "llama3.2:1b"

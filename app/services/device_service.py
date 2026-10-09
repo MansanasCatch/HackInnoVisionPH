@@ -9,14 +9,13 @@ from app.schemas.device import (
     DeviceSpecsCreate,
     DeviceSpecsDetect,
     DeviceSpecsRead,
-    DeviceSpecsUpdate,
     ModelSelectPayload,
     ModelSuggestionsResponse,
 )
 from app.services.device_detection import detect_system_hardware
 from app.services.model_recommendation import recommend_models_for_hardware
 from app.services.ollama_service import (
-    get_installed_ollama_models,
+    get_model_pull_progress,
     is_ollama_reachable,
     trigger_ollama_pull_background,
 )
@@ -65,9 +64,10 @@ class DeviceService:
         if self._onboarding_repo is not None:
             account = self._onboarding_repo.get(payload.onboarding_id)
             if account is None:
-                raise NotFoundError(f"Onboarding account with ID {payload.onboarding_id} not found.")
+                raise NotFoundError(
+                    f"Onboarding account with ID {payload.onboarding_id} not found."
+                )
 
-        # Determine model selection
         selected_model = payload.selected_model
         if not selected_model:
             suggestions = recommend_models_for_hardware(
@@ -100,23 +100,35 @@ class DeviceService:
             )
             saved = self._device_repo.add(device)
 
-        # Trigger auto pull in background
         trigger_ollama_pull_background(selected_model)
 
-        return DeviceSpecsRead.model_validate(saved)
+        read_dto = DeviceSpecsRead.model_validate(saved)
+        progress = get_model_pull_progress(selected_model)
+        read_dto.pull_status = progress["status"]
+        read_dto.pull_percentage = progress["pull_percentage"]
+        read_dto.pull_status_message = progress.get("status_message")
+        return read_dto
 
     def get_by_account(self, onboarding_id: int) -> DeviceSpecsRead:
         """Get device specs and selected model for an account."""
         device = self._device_repo.get_by_onboarding_id(onboarding_id)
         if device is None:
             raise NotFoundError(f"Device specs for onboarding account {onboarding_id} not found.")
-        return DeviceSpecsRead.model_validate(device)
+
+        read_dto = DeviceSpecsRead.model_validate(device)
+        progress = get_model_pull_progress(device.selected_model)
+        read_dto.pull_status = progress["status"]
+        read_dto.pull_percentage = progress["pull_percentage"]
+        read_dto.pull_status_message = progress.get("status_message")
+        return read_dto
 
     def select_active_model(self, payload: ModelSelectPayload) -> DeviceSpecsRead:
         """Runtime switch of the active local AI model for an account."""
         device = self._device_repo.get_by_onboarding_id(payload.onboarding_id)
         if device is None:
-            raise NotFoundError(f"Device specs for onboarding account {payload.onboarding_id} not found.")
+            raise NotFoundError(
+                f"Device specs for onboarding account {payload.onboarding_id} not found."
+            )
 
         device.selected_model = payload.selected_model
         device.pull_status = "pulling" if payload.auto_pull else "pending"
@@ -125,30 +137,32 @@ class DeviceService:
         if payload.auto_pull:
             trigger_ollama_pull_background(payload.selected_model)
 
-        return DeviceSpecsRead.model_validate(saved)
+        read_dto = DeviceSpecsRead.model_validate(saved)
+        progress = get_model_pull_progress(payload.selected_model)
+        read_dto.pull_status = progress["status"]
+        read_dto.pull_percentage = progress["pull_percentage"]
+        read_dto.pull_status_message = progress.get("status_message")
+        return read_dto
 
     def get_active_model(self, onboarding_id: int | None = None) -> ActiveModelResponse:
-        """Fetch current active local model to be used by Local AI execution engine."""
+        """Fetch current active local model with live pull percentage."""
         active_model = "llama3.2:1b"
-        pull_status = "completed"
         ollama_online = is_ollama_reachable()
 
         if onboarding_id is not None:
             device = self._device_repo.get_by_onboarding_id(onboarding_id)
             if device is not None:
                 active_model = device.selected_model
-                pull_status = device.pull_status
         else:
             active_model = self._device_repo.get_latest_active_model()
 
-        if ollama_online:
-            installed = get_installed_ollama_models()
-            if active_model in installed:
-                pull_status = "completed"
+        progress = get_model_pull_progress(active_model)
 
         return ActiveModelResponse(
             onboarding_id=onboarding_id,
             active_model=active_model,
-            pull_status=pull_status,
+            pull_status=progress["status"],
+            pull_percentage=progress["pull_percentage"],
+            pull_status_message=progress.get("status_message"),
             is_ollama_online=ollama_online,
         )

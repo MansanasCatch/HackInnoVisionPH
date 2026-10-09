@@ -33,14 +33,16 @@ def detect_hardware_specs(service: DeviceServiceDep) -> DeviceSpecsDetect:
     "/suggestions",
     response_model=ModelSuggestionsResponse,
     summary="Get AI model recommendations with reasons",
-    description="Analyze hardware specs and return suggested local AI models with detailed applicability reasons.",
+    description="Analyze hardware specs and return suggested local AI models with reasons.",
 )
 def get_model_suggestions(
     service: DeviceServiceDep,
     ram_gb: Annotated[float | None, Query(ge=0.5, description="System RAM in GB")] = None,
     vram_gb: Annotated[float, Query(ge=0, description="Dedicated GPU VRAM in GB")] = 0.0,
     gpu_name: Annotated[str | None, Query(description="GPU model name")] = None,
-    onboarding_id: Annotated[int | None, Query(description="Onboarding account ID to pull saved specs from")] = None,
+    onboarding_id: Annotated[
+        int | None, Query(description="Onboarding account ID to pull saved specs from")
+    ] = None,
 ) -> ModelSuggestionsResponse:
     """Get dropdown selection options for local AI models with reasons."""
     return service.get_suggestions(

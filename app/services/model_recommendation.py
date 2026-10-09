@@ -1,4 +1,4 @@
-"""Model recommendation engine providing dropdown options with detailed hardware suitability reasons."""
+"""Model recommendation engine providing dropdown options with suitability reasons."""
 
 from app.schemas.device import ModelOption, ModelSuggestionsResponse
 
@@ -74,10 +74,7 @@ def recommend_models_for_hardware(
     vram_gb: float = 0.0,
     gpu_name: str | None = None,
 ) -> ModelSuggestionsResponse:
-    """Analyze hardware specs and return list of model options with specific reasons for applicability."""
-    effective_ram = max(ram_gb, vram_gb * 2 if vram_gb > 0 else ram_gb)
-    has_dedicated_gpu = vram_gb >= 2.0 or (gpu_name and "integrated" not in gpu_name.lower())
-
+    """Analyze hardware specs and return list of model options with reasons for applicability."""
     options: list[ModelOption] = []
     top_recommended = "llama3.2:1b"
 
@@ -103,17 +100,15 @@ def recommend_models_for_hardware(
         if ram_gb < min_ram and vram_gb < min_vram:
             is_recommended = False
             reasons.append(
-                f"Requires at least {min_ram}GB RAM (device has {ram_gb}GB). May cause system slowdowns."
+                f"Requires at least {min_ram}GB RAM (device has {ram_gb}GB). May cause slowdowns."
             )
         elif vram_gb >= min_vram and min_vram > 0:
             is_recommended = True
-            reasons.append(
-                f"Fits in dedicated VRAM ({vram_gb}GB VRAM >= {min_vram}GB required). Enables hardware acceleration."
-            )
+            reasons.append(f"Fits in dedicated VRAM ({vram_gb}GB VRAM >= {min_vram}GB required).")
         elif ram_gb >= min_ram:
             is_recommended = True
             reasons.append(
-                f"Fits comfortably in system RAM ({ram_gb}GB RAM >= {min_ram}GB required). CPU inference supported."
+                f"Fits in system RAM ({ram_gb}GB RAM >= {min_ram}GB required). CPU mode ready."
             )
 
         if m_name == top_recommended:
@@ -137,7 +132,10 @@ def recommend_models_for_hardware(
             )
         )
 
-    summary = f"Device Specs: {ram_gb}GB RAM, {cpu_cores_desc(ram_gb)}, GPU: {gpu_name or 'Integrated'} ({vram_gb}GB VRAM)"
+    summary = (
+        f"Device Specs: {ram_gb}GB RAM, {cpu_cores_desc(ram_gb)}, "
+        f"GPU: {gpu_name or 'Integrated'} ({vram_gb}GB VRAM)"
+    )
 
     return ModelSuggestionsResponse(
         recommended_model=top_recommended,

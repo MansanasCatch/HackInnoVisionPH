@@ -1,7 +1,6 @@
 """Pydantic schemas for device hardware specs detection and local AI model selection."""
 
 from datetime import datetime
-from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -53,8 +52,10 @@ class ModelOption(BaseModel):
     min_ram_gb: float = Field(description="Minimum recommended system RAM in GB")
     min_vram_gb: float = Field(description="Minimum recommended dedicated VRAM in GB")
     tier: str = Field(description="Hardware tier requirement: Low, Medium, or High")
-    is_recommended: bool = Field(description="Whether this model is recommended for the given hardware")
-    reason: str = Field(description="Detailed reason explaining why this model is or isn't applicable for the device specs")
+    is_recommended: bool = Field(
+        description="Whether this model is recommended for the given hardware"
+    )
+    reason: str = Field(description="Reason explaining model hardware suitability")
 
 
 class ModelSuggestionsResponse(BaseModel):
@@ -62,7 +63,9 @@ class ModelSuggestionsResponse(BaseModel):
 
     recommended_model: str = Field(description="Top recommended model tag for the device")
     device_summary: str = Field(description="Hardware summary line")
-    models: list[ModelOption] = Field(description="List of available local AI model choices with reasons")
+    models: list[ModelOption] = Field(
+        description="List of available local AI model choices with reasons"
+    )
 
 
 class ModelSelectPayload(BaseModel):
@@ -70,15 +73,25 @@ class ModelSelectPayload(BaseModel):
 
     onboarding_id: int = Field(description="ID of the onboarding account")
     selected_model: str = Field(description="Target Ollama model tag, e.g. llama3.2:1b")
-    auto_pull: bool = Field(default=True, description="Whether to trigger an auto-pull from Ollama server")
+    auto_pull: bool = Field(
+        default=True, description="Whether to trigger an auto-pull from Ollama server"
+    )
 
 
 class ActiveModelResponse(BaseModel):
-    """Response returning the active model to be used by AI operations."""
+    """Response returning the active model and live pull progress to be used by AI operations."""
 
     onboarding_id: int | None = Field(default=None, description="Associated onboarding account ID")
     active_model: str = Field(description="Currently active local AI model tag")
-    pull_status: str = Field(description="Status of model pull (e.g. completed, pulling, pending, not_pulled)")
+    pull_status: str = Field(
+        description="Status of model pull (e.g. completed, pulling, pending, not_pulled, offline)"
+    )
+    pull_percentage: float = Field(
+        default=0.0, description="Model pull progress percentage from 0.0 to 100.0"
+    )
+    pull_status_message: str | None = Field(
+        default=None, description="Live pull status message (e.g. downloading layer...)"
+    )
     is_ollama_online: bool = Field(description="Whether local Ollama service is reachable")
 
 
@@ -95,6 +108,8 @@ class DeviceSpecsRead(BaseModel):
     os_name: str
     selected_model: str
     pull_status: str
+    pull_percentage: float = 0.0
+    pull_status_message: str | None = None
     created_at: datetime
     updated_at: datetime
 

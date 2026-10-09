@@ -1,7 +1,5 @@
 """Use cases for managing user onboarding profiles."""
 
-from collections.abc import Sequence
-
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.onboarding import OnboardingProfile
 from app.repositories.onboarding_repository import AbstractOnboardingRepository

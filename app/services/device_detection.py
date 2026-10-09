@@ -74,7 +74,10 @@ def _detect_gpu_info() -> tuple[str | None, float]:
     # 3. Try Windows WMIC / PowerShell query for display adapters
     if os.name == "nt":
         try:
-            cmd = "powershell -Command \"Get-CimInstance Win32_VideoController | Select-Name Name,AdapterRAM | ConvertTo-Json\""
+            cmd = (
+                'powershell -Command "Get-CimInstance Win32_VideoController '
+                '| Select-Name Name,AdapterRAM | ConvertTo-Json"'
+            )
             res = subprocess.check_output(cmd, shell=True, text=True, timeout=3.0).strip()
             if "NVIDIA" in res or "AMD" in res or "Radeon" in res or "Intel" in res:
                 # Basic check for GPU name
