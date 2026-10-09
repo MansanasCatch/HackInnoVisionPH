@@ -330,6 +330,20 @@ Base path: `/api/v1`
 | `POST` | `/ai/generate` | Generate text using active local model for the account |
 | `POST` | `/ai/generate-with-files` | Generate Local AI response grounded by attached file contents (PDF, Word, Excel, Images, CSV, Text) |
 
+### Learning Resources and Study Sessions
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/learning-resources` | Create a learner-owned resource |
+| `POST` | `/learning-resources/{resource_id}/versions` | Add a version and retain only the latest three full versions |
+| `GET` | `/learning-resources/{resource_id}/versions` | List the latest three selectable versions |
+| `GET` | `/learning-resources/{resource_id}/versions/{version_id}/progress` | Check first-time status and progress for one version |
+| `GET` | `/learning-resources/{resource_id}/analytics/archived` | Read compact metrics for removed versions |
+| `POST` | `/study-sessions` | Start an attempt against an exact version |
+| `POST` | `/study-sessions/{session_id}/answers` | Record an answer and concept evidence |
+| `POST` | `/study-sessions/{session_id}/complete` | Score the attempt and advance only the current version |
+
+Completing the current version creates a successor with an `adaptive_review` section based on recorded answers. Completing an older version only updates its progress. The completion response includes `new_version_id` and `archived_version_number` when applicable. Repeating completion returns the original result without adding another attempt or version. Before removing an old version, the API preserves its compact score and concept totals for analytics; its full content and answer history are deleted.
+
 ---
 
 ## 🗄️ Database Migrations

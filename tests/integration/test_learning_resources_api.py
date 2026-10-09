@@ -57,6 +57,13 @@ def test_learning_resource_versions_keep_latest_three(client: TestClient) -> Non
     assert [version["version_number"] for version in versions] == [4, 3, 2]
     assert len(versions) == 3
 
+    removed = client.get(f"/api/v1/learning-resources/{resource_id}/versions/1")
+    assert removed.status_code == 404
+    archived = client.get(f"/api/v1/learning-resources/{resource_id}/analytics/archived")
+    assert archived.status_code == 200
+    assert [record["version_number"] for record in archived.json()] == [1]
+    assert archived.json()[0]["attempts_count"] == 0
+
     latest = versions[0]
     assert latest["is_current"] is True
     assert latest["resource_types"] == [

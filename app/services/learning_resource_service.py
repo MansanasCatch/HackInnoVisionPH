@@ -5,6 +5,7 @@ from app.models.learning_resource import LearningResource, LearningResourceVersi
 from app.repositories.learning_resource_repository import AbstractLearningResourceRepository
 from app.repositories.onboarding_repository import AbstractOnboardingRepository
 from app.schemas.learning_resource import (
+    ArchivedVersionAnalyticsRead,
     LearningResourceCreate,
     LearningResourceRead,
     LearningResourceVersionCreate,
@@ -67,8 +68,16 @@ class LearningResourceService:
             topics=payload.topics,
             is_current=True,
         )
-        saved = self._repository.create_version(version)
+        saved, _ = self._repository.create_version(version)
         return LearningResourceVersionRead.model_validate(saved)
+
+    def list_archived_analytics(self, resource_id: int) -> list[ArchivedVersionAnalyticsRead]:
+        """Fetch compact analytics for older versions of a resource."""
+        self._get_resource_or_raise(resource_id)
+        return [
+            ArchivedVersionAnalyticsRead.model_validate(record)
+            for record in self._repository.list_archived_analytics(resource_id)
+        ]
 
     def list_versions(
         self, *, resource_id: int, limit: int = 3
