@@ -1,0 +1,168 @@
+"""Use cases for Device Specs Setup and Local AI Model management."""
+
+from app.core.exceptions import NotFoundError
+from app.models.device import DeviceSpecs
+from app.repositories.device_repository import AbstractDeviceRepository
+from app.repositories.onboarding_repository import AbstractOnboardingRepository
+from app.schemas.device import (
+    ActiveModelResponse,
+    DeviceSpecsCreate,
+    DeviceSpecsDetect,
+    DeviceSpecsRead,
+    ModelSelectPayload,
+    ModelSuggestionsResponse,
+)
+from app.services.device_detection import detect_system_hardware
+from app.services.model_recommendation import recommend_models_for_hardware
+from app.services.ollama_service import (
+    get_model_pull_progress,
+    is_ollama_reachable,
+    trigger_ollama_pull_background,
+)
+
+
+class DeviceService:
+    """Business logic orchestrator for device hardware specs and local AI model selection."""
+
+    def __init__(
+        self,
+        device_repository: AbstractDeviceRepository,
+        onboarding_repository: AbstractOnboardingRepository | None = None,
+    ) -> None:
+        self._device_repo = device_repository
+        self._onboarding_repo = onboarding_repository
+
+    def auto_detect_hardware(self) -> DeviceSpecsDetect:
+        """Auto-detect host machine RAM, GPU, CPU, storage, and OS."""
+        return detect_system_hardware()
+
+    def get_suggestions(
+        self,
+        ram_gb: float | None = None,
+        vram_gb: float = 0.0,
+        gpu_name: str | None = None,
+        onboarding_id: int | None = None,
+    ) -> ModelSuggestionsResponse:
+        """Get model options with specific hardware applicability reasons."""
+        if onboarding_id is not None:
+            saved = self._device_repo.get_by_onboarding_id(onboarding_id)
+            if saved is not None:
+                ram_gb = saved.ram_gb
+                vram_gb = saved.vram_gb
+                gpu_name = saved.gpu_name
+
+        if ram_gb is None:
+            detected = detect_system_hardware()
+            ram_gb = detected.ram_gb
+            vram_gb = detected.vram_gb
+            gpu_name = detected.gpu_name
+
+        return recommend_models_for_hardware(ram_gb=ram_gb, vram_gb=vram_gb, gpu_name=gpu_name)
+
+    def create_or_update_device_specs(self, payload: DeviceSpecsCreate) -> DeviceSpecsRead:
+        """Create or update device specs setup linked to an onboarding account."""
+        if self._onboarding_repo is not None:
+            account = self._onboarding_repo.get(payload.onboarding_id)
+            if account is None:
+                raise NotFoundError(
+                    f"Onboarding account with ID {payload.onboarding_id} not found."
+                )
+
+        selected_model = payload.selected_model
+        if not selected_model:
+            suggestions = recommend_models_for_hardware(
+                ram_gb=payload.ram_gb, vram_gb=payload.vram_gb, gpu_name=payload.gpu_name
+            )
+            selected_model = suggestions.recommended_model
+
+        existing = self._device_repo.get_by_onboarding_id(payload.onboarding_id)
+        if existing is not None:
+            existing.ram_gb = payload.ram_gb
+            existing.gpu_name = payload.gpu_name
+            existing.vram_gb = payload.vram_gb
+            existing.cpu_cores = payload.cpu_cores
+            existing.storage_free_gb = payload.storage_free_gb
+            existing.os_name = payload.os_name
+            existing.selected_model = selected_model
+            existing.pull_status = "pulling"
+            saved = self._device_repo.update(existing)
+        else:
+            device = DeviceSpecs(
+                onboarding_id=payload.onboarding_id,
+                ram_gb=payload.ram_gb,
+                gpu_name=payload.gpu_name,
+                vram_gb=payload.vram_gb,
+                cpu_cores=payload.cpu_cores,
+                storage_free_gb=payload.storage_free_gb,
+                os_name=payload.os_name,
+                selected_model=selected_model,
+                pull_status="pulling",
+            )
+            saved = self._device_repo.add(device)
+
+        trigger_ollama_pull_background(selected_model)
+
+        read_dto = DeviceSpecsRead.model_validate(saved)
+        progress = get_model_pull_progress(selected_model)
+        read_dto.pull_status = progress["status"]
+        read_dto.pull_percentage = progress["pull_percentage"]
+        read_dto.pull_status_message = progress.get("status_message")
+        return read_dto
+
+    def get_by_account(self, onboarding_id: int) -> DeviceSpecsRead:
+        """Get device specs and selected model for an account."""
+        device = self._device_repo.get_by_onboarding_id(onboarding_id)
+        if device is None:
+            raise NotFoundError(f"Device specs for onboarding account {onboarding_id} not found.")
+
+        read_dto = DeviceSpecsRead.model_validate(device)
+        progress = get_model_pull_progress(device.selected_model)
+        read_dto.pull_status = progress["status"]
+        read_dto.pull_percentage = progress["pull_percentage"]
+        read_dto.pull_status_message = progress.get("status_message")
+        return read_dto
+
+    def select_active_model(self, payload: ModelSelectPayload) -> DeviceSpecsRead:
+        """Runtime switch of the active local AI model for an account."""
+        device = self._device_repo.get_by_onboarding_id(payload.onboarding_id)
+        if device is None:
+            raise NotFoundError(
+                f"Device specs for onboarding account {payload.onboarding_id} not found."
+            )
+
+        device.selected_model = payload.selected_model
+        device.pull_status = "pulling" if payload.auto_pull else "pending"
+        saved = self._device_repo.update(device)
+
+        if payload.auto_pull:
+            trigger_ollama_pull_background(payload.selected_model)
+
+        read_dto = DeviceSpecsRead.model_validate(saved)
+        progress = get_model_pull_progress(payload.selected_model)
+        read_dto.pull_status = progress["status"]
+        read_dto.pull_percentage = progress["pull_percentage"]
+        read_dto.pull_status_message = progress.get("status_message")
+        return read_dto
+
+    def get_active_model(self, onboarding_id: int | None = None) -> ActiveModelResponse:
+        """Fetch current active local model with live pull percentage."""
+        active_model = "llama3.2:1b"
+        ollama_online = is_ollama_reachable()
+
+        if onboarding_id is not None:
+            device = self._device_repo.get_by_onboarding_id(onboarding_id)
+            if device is not None:
+                active_model = device.selected_model
+        else:
+            active_model = self._device_repo.get_latest_active_model()
+
+        progress = get_model_pull_progress(active_model)
+
+        return ActiveModelResponse(
+            onboarding_id=onboarding_id,
+            active_model=active_model,
+            pull_status=progress["status"],
+            pull_percentage=progress["pull_percentage"],
+            pull_status_message=progress.get("status_message"),
+            is_ollama_online=ollama_online,
+        )
