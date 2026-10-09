@@ -24,7 +24,7 @@ type IconName =
   | "download" | "arrow" | "play" | "clock" | "check" | "mic" | "send"
   | "plus" | "pause" | "stop" | "search" | "file" | "cards" | "quiz"
   | "chevron" | "more" | "edit" | "offline" | "close" | "headphones"
-  | "upload" | "layers" | "image";
+  | "upload" | "layers" | "image" | "sun" | "moon";
 
 const paths: Record<IconName, ReactNode> = {
   home: <><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10M9 20v-6h6v6"/></>,
@@ -57,14 +57,50 @@ const paths: Record<IconName, ReactNode> = {
   upload: <><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 15v5h16v-5"/></>,
   layers: <><path d="m12 2 9 5-9 5-9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/></>,
   image: <><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 20"/></>,
+  sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41"/></>,
+  moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>,
 };
 
 function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-function Lumi({ size = "medium" }: { size?: "small" | "medium" | "large" }) {
-  return <span className={`lumi-art lumi-${size}`} role="img" aria-label="Lumi, a friendly coral and teal owl learning companion"/>;
+export type ExpressionState =
+  | "happy" | "curious" | "thinking" | "supportive"
+  | "focused" | "excited" | "listening" | "concerned";
+
+export type ExpressionState =
+  | "happy" | "curious" | "thinking" | "supportive"
+  | "focused" | "excited" | "listening" | "concerned";
+
+export function Calibrat8Mascot({
+  expression = "happy",
+  size = "medium",
+  className = ""
+}: {
+  expression?: ExpressionState;
+  size?: "small" | "medium" | "large" | "hero";
+  className?: string;
+}) {
+  const sizePx = { small: 42, medium: 84, large: 140, hero: 220 }[size];
+  return (
+    <div className={`calibrat8-mascot calibrat8-${size} ${className}`} style={{ width: sizePx, height: sizePx, display: "inline-grid", placeItems: "center" }}>
+      <img
+        src="/calibrat8-character.png"
+        alt={`Calibrat8 companion character (${expression})`}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
+          filter: "drop-shadow(0 10px 20px rgba(56, 189, 248, 0.25))"
+        }}
+      />
+    </div>
+  );
+}
+
+function Lumi({ size = "medium", expression = "happy" }: { size?: "small" | "medium" | "large" | "hero"; expression?: ExpressionState }) {
+  return <Calibrat8Mascot size={size} expression={expression} />;
 }
 
 function Button({ children, onClick, variant = "primary", icon, type = "button", disabled = false, className = "" }: {
@@ -93,11 +129,11 @@ function isNavActive(item: Page, page: Page) {
   return item === "knowledge" && page === "coach";
 }
 
-function Sidebar({ page, setPage, online, setOnline, profile, editProfile }: { page: Page; setPage: (p: Page) => void; online: boolean; setOnline: (v: boolean) => void; profile: ProfileData; editProfile: () => void }) {
+function Sidebar({ page, setPage, online, setOnline, profile, editProfile, theme, toggleTheme }: { page: Page; setPage: (p: Page) => void; online: boolean; setOnline: (v: boolean) => void; profile: ProfileData; editProfile: () => void }) {
   return <aside className="sidebar">
-    <button className="brand" onClick={() => setPage("home")} aria-label="Lumi home">
+    <button className="brand" onClick={() => setPage("home")} aria-label="Calibrat8 home">
       <span className="brand-mark"><Icon name="spark" size={18}/></span>
-      <span>Lumi</span>
+      <span>Calibrat8</span>
     </button>
     <nav className="nav-list" aria-label="Primary navigation">
       {nav.map(item => <button key={item.id} className={`nav-item ${isNavActive(item.id, page) ? "active" : ""}`} onClick={() => setPage(item.id)}>
@@ -105,6 +141,7 @@ function Sidebar({ page, setPage, online, setOnline, profile, editProfile }: { p
       </button>)}
     </nav>
     <div className="sidebar-bottom">
+      <button className="nav-item" onClick={toggleTheme}><Icon name={theme === "dark" ? "sun" : "moon"}/><span>{theme === "dark" ? "Light theme" : "Dark theme"}</span></button>
       <button className={`connection ${online ? "" : "is-offline"}`} onClick={() => setOnline(!online)}>
         <span className="status-dot"/><span><strong>{online ? "Online" : "Offline"}</strong><small>{online ? "AI tutor available" : "Saved materials ready"}</small></span>
       </button>
@@ -121,10 +158,15 @@ function MobileNav({ page, setPage }: { page: Page; setPage: (p: Page) => void }
   )}</nav>;
 }
 
-function Topbar({ title, online, setOnline }: { title: string; online: boolean; setOnline: (v: boolean) => void }) {
+function Topbar({ title, online, setOnline, theme, toggleTheme }: { title: string; online: boolean; setOnline: (v: boolean) => void; theme: "dark" | "light"; toggleTheme: () => void }) {
   return <header className="topbar">
-    <div><p className="eyebrow">LEARNING COMPANION</p><h1>{title}</h1></div>
-    <button className={`top-status ${online ? "" : "is-offline"}`} onClick={() => setOnline(!online)}><Icon name={online ? "wifi" : "offline"} size={17}/>{online ? "Online" : "Offline"}</button>
+    <div><p className="eyebrow">COSMIC LEARNING COMPANION · LEARN, SCORE, CALIBRATE</p><h1>{title}</h1></div>
+    <div className="topbar-actions">
+      <button className="theme-toggle-btn" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light (neumorphic)" : "dark (cosmic glass)"} theme`}>
+        <Icon name={theme === "dark" ? "sun" : "moon"} size={18}/>
+      </button>
+      <button className={`top-status ${online ? "" : "is-offline"}`} onClick={() => setOnline(!online)}><Icon name={online ? "wifi" : "offline"} size={17}/>{online ? "Online" : "Offline"}</button>
+    </div>
   </header>;
 }
 
@@ -146,7 +188,7 @@ function Home({ go, online, openOffline, profile }: { go: (p: Page) => void; onl
       <div className="hero-visual" aria-hidden="true">
         <div className="orbit orbit-one"/><div className="orbit orbit-two"/>
         <Lumi size="large"/>
-        <div className="float-card"><Icon name="spark" size={16}/><span><strong>Lumi’s here.</strong> One step at a time.</span></div>
+        <div className="float-card"><Icon name="spark" size={16}/><span><strong>Calibrat8 is ready.</strong> One step at a time.</span></div>
       </div>
     </section>
 
@@ -195,7 +237,7 @@ function Tutor({ online }: { online: boolean }) {
   };
   return <div className="tutor-layout">
     <section className="chat-area">
-      <div className="chat-intro"><Lumi size="medium"/><div><Badge tone={online ? "sage" : "neutral"}>{online ? "LUMI · AI TUTOR ONLINE" : "LUMI · LIVE HELP UNAVAILABLE"}</Badge><h2>Let’s figure this out together.</h2><p>Ask Lumi a question, or choose a quick way to continue.</p></div></div>
+      <div className="chat-intro"><Lumi size="medium"/><div><Badge tone={online ? "sage" : "neutral"}>{online ? "CALIBRAT8 · AI TUTOR ONLINE" : "CALIBRAT8 · LIVE HELP UNAVAILABLE"}</Badge><h2>Let’s figure this out together.</h2><p>Ask Calibrat8 a question, or choose a quick way to continue.</p></div></div>
       <div className="messages">
         {messages.map((m, i) => <div key={i} className={`message-row ${m.role}`}>
           {m.role === "tutor" && <Lumi size="small"/>}
@@ -288,7 +330,7 @@ function Focus({ exit, completeSession }: { exit: () => void; completeSession: (
   const [flipped, setFlipped] = useState(false);
   const [answer, setAnswer] = useState<number | null>(null);
   return <div className="focus-shell">
-    <header className="focus-header"><button className="brand" onClick={exit}><span className="brand-mark"><Icon name="spark" size={18}/></span><span>Lumi</span></button><div className="focus-progress"><span><strong>Quadratic equations</strong><small>Activity {step + 1} of 3 · {25 - step * 8} min remaining</small></span><div><i style={{ width: `${(step + 1) * 33}%` }}/></div></div><Button onClick={() => setPaused(!paused)} variant="secondary" icon={paused ? "play" : "pause"}>{paused ? "Resume" : "Pause"}</Button></header>
+    <header className="focus-header"><button className="brand" onClick={exit}><span className="brand-mark"><Icon name="spark" size={18}/></span><span>Calibrat8</span></button><div className="focus-progress"><span><strong>Quadratic equations</strong><small>Activity {step + 1} of 3 · {25 - step * 8} min remaining</small></span><div><i style={{ width: `${(step + 1) * 33}%` }}/></div></div><Button onClick={() => setPaused(!paused)} variant="secondary" icon={paused ? "play" : "pause"}>{paused ? "Resume" : "Pause"}</Button></header>
     <main className="focus-main">
       {paused ? <div className="pause-state"><div className="complete-mark"><Icon name="pause"/></div><h2>Session paused.</h2><p>Take the time you need. Your place is saved on this device.</p><Button onClick={() => setPaused(false)} icon="play">Resume when ready</Button></div> :
       <><div className="focus-kicker"><span>ACTIVITY {step + 1}</span><Badge tone="blue">{step === 0 ? "CONCEPT" : step === 1 ? "FLASHCARD" : "QUICK CHECK"}</Badge></div>
@@ -373,7 +415,7 @@ function ContentIngestion({ online, done }: { online: boolean; done: (next?: "li
           <input type="file" accept="audio/*" capture="user" onChange={e => { addFiles(e.target.files); e.currentTarget.value = ""; }}/>
           <span className="drop-icon"><Icon name="mic" size={24}/></span>
           <strong>Record a voice command</strong>
-          <p>Tell Lumi what you want to learn or explain what you already know.</p>
+          <p>Tell Calibrat8 what you want to learn or explain what you already know.</p>
           <small>Uses your device’s recorder when supported · microphone permission may be requested</small>
         </label>}
         {inputMethod === "camera" && <label className="drop-zone compact-drop-zone">
@@ -393,7 +435,7 @@ function ContentIngestion({ online, done }: { online: boolean; done: (next?: "li
         {files.length > 0 && <div className="file-queue">{files.map((file, index) => <div key={`${file.name}-${index}`}><span className="file-type">{file.type.slice(0, 4)}</span><p><strong>{file.name}</strong><small>{file.size} · Ready to add</small></p><button onClick={() => setFiles(files.filter((_, fileIndex) => fileIndex !== index))} aria-label={`Remove ${file.name}`}><Icon name="close" size={17}/></button></div>)}</div>}
         <div className="format-note"><Icon name="file"/><p><strong>Prototype capture</strong><br/>Text is kept in this session. Audio, photos, and files can be selected and reviewed, but are not transcribed, analyzed, or uploaded to an AI service.</p></div>
       </section>
-      <aside className="panel ingest-help"><div className="icon-tile"><Icon name="spark"/></div><p className="eyebrow">CHOOSE YOUR WAY</p><h3>Show or tell Lumi.</h3><div className="help-step"><span>1</span><p><strong>Name the topic</strong><small>Use any subject, skill, or idea you want to learn.</small></p></div><div className="help-step"><span>2</span><p><strong>Add learning material</strong><small>Type, speak, take a photo with your camera, or choose a saved file.</small></p></div><div className="availability"><Icon name={online ? "wifi" : "offline"}/><p><strong>{online ? "Online" : "Working offline"}</strong><br/>{online ? "Selected material can enter the prototype workflow." : "You can capture material now. New AI processing is unavailable."}</p></div></aside>
+      <aside className="panel ingest-help"><div className="icon-tile"><Icon name="spark"/></div><p className="eyebrow">CHOOSE YOUR WAY</p><h3>Show or tell Calibrat8.</h3><div className="help-step"><span>1</span><p><strong>Name the topic</strong><small>Use any subject, skill, or idea you want to learn.</small></p></div><div className="help-step"><span>2</span><p><strong>Add learning material</strong><small>Type, speak, take a photo with your camera, or choose a saved file.</small></p></div><div className="availability"><Icon name={online ? "wifi" : "offline"}/><p><strong>{online ? "Online" : "Working offline"}</strong><br/>{online ? "Selected material can enter the prototype workflow." : "You can capture material now. New AI processing is unavailable."}</p></div></aside>
       <div className="ingest-footer"><p>{hasContent ? "Your topic and learning material are ready." : "Add a topic, then type, record, capture, or upload learning material."}</p><Button disabled={!hasContent} onClick={() => setStage("ready")} icon="check">Prepare material</Button></div>
     </div>
   </div>;
@@ -411,7 +453,7 @@ function Generation({ online, finish, back }: { online: boolean; finish: () => v
   return <div className="page workflow-page">
     <button className="back-link" onClick={back}>← Back to imported material</button>
     <section className="workflow-hero">
-      <div><Badge tone="peach">PROTOTYPE GENERATION</Badge><h2>What should Lumi prepare?</h2><p>Select the resources you want. This prototype uses clearly labeled sample content; no local or cloud AI model is connected.</p></div>
+      <div><Badge tone="peach">PROTOTYPE GENERATION</Badge><h2>What should Calibrat8 prepare?</h2><p>Select the resources you want. This prototype uses clearly labeled sample content; no local or cloud AI model is connected.</p></div>
       <Lumi size="medium"/>
     </section>
     <div className="generation-layout">
@@ -503,13 +545,13 @@ function QuizViewer({ back, submit }: { back: () => void; submit: (attempt: Atte
 
 function SessionCompletion({ attempt, go }: { attempt: Attempt; go: (page: Page) => void }) {
   const percentage = Math.round((attempt.score / attempt.total) * 100);
-  return <div className="page completion-page"><section className="completion-card panel"><div className="completion-lumi"><Lumi size="medium"/></div><Badge>SESSION COMPLETED</Badge><h2>{percentage === 100 ? "Wonderful focus—you understood every check." : "Nice progress. Every answer gives us a clearer next step."}</h2><p>Lumi saved this result locally and used only your submitted answers to update the knowledge map.</p><div className="summary-stats"><span><strong>{attempt.score}/{attempt.total}</strong><small>Correct answers</small></span><span><strong>{attempt.concepts.filter(item => !item.correct).length}</strong><small>Topics to revisit</small></span><span><strong>Saved</strong><small>On this device</small></span></div><div className="recalc-state"><span><Icon name="check"/></span><p><strong>Knowledge map updated</strong><small>Recommendations now reflect this session’s evidence.</small></p></div><div className="completion-actions"><Button onClick={() => go("knowledge")} icon="layers">View knowledge map</Button><Button variant="secondary" onClick={() => go("recommendations")} icon="spark">See next steps</Button></div></section></div>;
+  return <div className="page completion-page"><section className="completion-card panel"><div className="completion-lumi"><Lumi size="medium"/></div><Badge>SESSION COMPLETED</Badge><h2>{percentage === 100 ? "Wonderful focus—you understood every check." : "Nice progress. Every answer gives us a clearer next step."}</h2><p>Calibrat8 saved this result locally and used only your submitted answers to update the knowledge map.</p><div className="summary-stats"><span><strong>{attempt.score}/{attempt.total}</strong><small>Correct answers</small></span><span><strong>{attempt.concepts.filter(item => !item.correct).length}</strong><small>Topics to revisit</small></span><span><strong>Saved</strong><small>On this device</small></span></div><div className="recalc-state"><span><Icon name="check"/></span><p><strong>Knowledge map updated</strong><small>Recommendations now reflect this session’s evidence.</small></p></div><div className="completion-actions"><Button onClick={() => go("knowledge")} icon="layers">View knowledge map</Button><Button variant="secondary" onClick={() => go("recommendations")} icon="spark">See next steps</Button></div></section></div>;
 }
 
 function KnowledgeMap({ attempt, recommendations }: { attempt: Attempt | null; recommendations: () => void }) {
   const topics = Array.from(new Set([...(attempt?.concepts.map(item => item.name) || []), "Purpose of mitosis", "Mitosis phases", "Interphase", "Cytokinesis"]));
   return <div className="page knowledge-page"><section className="workflow-hero"><div><Badge tone="blue">KNOWLEDGE MAP</Badge><h2>See what the evidence supports.</h2><p>Topic states come from completed answers—not guesses about your ability.</p></div>{attempt && <Button onClick={recommendations} icon="spark">Knowledge Analysis</Button>}</section>
-    {!attempt ? <section className="empty-evidence panel"><div><Icon name="layers" size={28}/></div><h3>No assessed topics yet</h3><p>Complete a quiz or focused study session to begin your knowledge map. Lumi won’t invent mastery scores without evidence.</p></section> :
+    {!attempt ? <section className="empty-evidence panel"><div><Icon name="layers" size={28}/></div><h3>No assessed topics yet</h3><p>Complete a quiz or focused study session to begin your knowledge map. Calibrat8 won’t invent mastery scores without evidence.</p></section> :
     <div className="knowledge-layout"><section className="panel map-card"><div className="map-legend"><span><i className="strong"/>Strong understanding</span><span><i className="developing"/>Developing</span><span><i className="practice"/>Needs practice</span><span><i className="unassessed"/>Not assessed</span></div><div className="topic-map">{topics.map(topic => { const result = attempt.concepts.find(item => item.name === topic); const state = result ? result.correct ? "strong" : "practice" : "unassessed"; return <div className={`topic-state ${state}`} key={topic}><span><Icon name={result?.correct ? "check" : result ? "spark" : "more"}/></span><p><strong>{topic}</strong><small>{state === "strong" ? "Correct in your latest quiz" : state === "practice" ? "Incorrect in your latest quiz" : "No submitted answer yet"}</small></p><Badge tone={state === "strong" ? "sage" : state === "practice" ? "peach" : "neutral"}>{state === "strong" ? "Strong" : state === "practice" ? "Needs practice" : "Not assessed"}</Badge></div>})}</div></section><aside className="panel evidence-panel"><p className="eyebrow">LATEST EVIDENCE</p><h3>{attempt.score} of {attempt.total} correct</h3><p>{new Date(attempt.completedAt).toLocaleDateString()} · {attempt.source === "quiz" ? "Quiz" : "Study session"}</p><hr/><strong>How this works</strong><p>Correct answers support “strong” for this attempt. Incorrect answers flag practice. More sessions are needed before claiming lasting mastery.</p></aside></div>}
   </div>;
 }
@@ -517,13 +559,13 @@ function KnowledgeMap({ attempt, recommendations }: { attempt: Attempt | null; r
 function Recommendations({ attempt, start, library }: { attempt: Attempt | null; start: () => void; library: () => void }) {
   const gaps = attempt?.concepts.filter(item => !item.correct) || [];
   return <div className="page recommendation-page"><button className="back-link" onClick={library}>← Learning Resources</button><section className="workflow-hero"><div><Badge tone="peach">ADAPTIVE PRACTICE</Badge><h2>{gaps.length ? "Let’s strengthen the parts that need another look." : "Your next step will appear here."}</h2><p>Recommendations use your latest submitted answers and preserve the original resource version.</p></div><Lumi size="medium"/></section>
-    {!attempt ? <section className="empty-evidence panel"><div><Icon name="spark"/></div><h3>Complete one activity first</h3><p>Once Lumi has real answer evidence, targeted notes, cards, and practice will appear here.</p><Button onClick={start} icon="play">Start study mode</Button></section> :
-    <div className="recommendation-grid">{gaps.length ? gaps.map((gap, index) => <section className="panel recommendation-card" key={gap.name}><span className="recommendation-icon"><Icon name={index % 2 ? "cards" : "quiz"}/></span><Badge tone="peach">BASED ON LATEST QUIZ</Badge><h3>Review {gap.name.toLowerCase()}</h3><p>You missed the question connected to this concept. Try a short explanation, then answer a similar check.</p><div className="version-note"><Icon name="layers"/><span><strong>Suggested update · Version 2</strong><small>Version 1 remains available</small></span></div><Button onClick={start} icon="play" className="full-button">Start targeted practice</Button></section>) : <section className="panel recommendation-card"><span className="recommendation-icon"><Icon name="check"/></span><Badge>NO GAPS IN LATEST QUIZ</Badge><h3>Revisit later for spaced practice</h3><p>Your latest answers were correct. Lumi will not invent a weakness; review again later to strengthen retention.</p><Button onClick={library} variant="secondary">Back to resources</Button></section>}</div>}
+    {!attempt ? <section className="empty-evidence panel"><div><Icon name="spark"/></div><h3>Complete one activity first</h3><p>Once Calibrat8 has real answer evidence, targeted notes, cards, and practice will appear here.</p><Button onClick={start} icon="play">Start study mode</Button></section> :
+    <div className="recommendation-grid">{gaps.length ? gaps.map((gap, index) => <section className="panel recommendation-card" key={gap.name}><span className="recommendation-icon"><Icon name={index % 2 ? "cards" : "quiz"}/></span><Badge tone="peach">BASED ON LATEST QUIZ</Badge><h3>Review {gap.name.toLowerCase()}</h3><p>You missed the question connected to this concept. Try a short explanation, then answer a similar check.</p><div className="version-note"><Icon name="layers"/><span><strong>Suggested update · Version 2</strong><small>Version 1 remains available</small></span></div><Button onClick={start} icon="play" className="full-button">Start targeted practice</Button></section>) : <section className="panel recommendation-card"><span className="recommendation-icon"><Icon name="check"/></span><Badge>NO GAPS IN LATEST QUIZ</Badge><h3>Revisit later for spaced practice</h3><p>Your latest answers were correct. Calibrat8 will not invent a weakness; review again later to strengthen retention.</p><Button onClick={library} variant="secondary">Back to resources</Button></section>}</div>}
   </div>;
 }
 
 function ComparisonReport({ attempts, takeQuiz }: { attempts: Attempt[]; takeQuiz: () => void }) {
-  if (!attempts.length) return <div className="page report-page"><section className="workflow-hero"><div><Badge tone="blue">REPORT LEARNING</Badge><h2>Your learning insights will appear here.</h2><p>Complete a study session or quiz to begin a report based on your actual answers.</p></div></section><section className="empty-evidence panel"><div><Icon name="chart" size={28}/></div><h3>No learning evidence yet</h3><p>Lumi won’t invent strengths, gaps, or weekly trends. Your first completed activity will start this report.</p><Button onClick={takeQuiz} icon="quiz">Take a quiz</Button></section></div>;
+  if (!attempts.length) return <div className="page report-page"><section className="workflow-hero"><div><Badge tone="blue">REPORT LEARNING</Badge><h2>Your learning insights will appear here.</h2><p>Complete a study session or quiz to begin a report based on your actual answers.</p></div></section><section className="empty-evidence panel"><div><Icon name="chart" size={28}/></div><h3>No learning evidence yet</h3><p>Calibrat8 won’t invent strengths, gaps, or weekly trends. Your first completed activity will start this report.</p><Button onClick={takeQuiz} icon="quiz">Take a quiz</Button></section></div>;
 
   const conceptEvidence = new Map<string, { correct: number; total: number }>();
   attempts.forEach(attempt => attempt.concepts.forEach(concept => {
@@ -613,7 +655,7 @@ function Coach({ back }: { back: () => void }) {
 }
 
 const defaultProfile: ProfileData = {
-  name: "Amara Mensah",
+  name: "Calibrat8 Learner",
   level: "Senior high school",
   subjects: ["Mathematics", "Biology", "History"],
   examDate: "",
@@ -630,7 +672,7 @@ const defaultProfile: ProfileData = {
 
 function readSavedProfile() {
   try {
-    const saved = localStorage.getItem("lumi-profile") || localStorage.getItem("studypath-profile");
+    const saved = localStorage.getItem("calibrat8-profile") || localStorage.getItem("studypath-profile");
     if (!saved) return null;
     const parsed = JSON.parse(saved) as Partial<ProfileData>;
     return {
@@ -646,7 +688,7 @@ function readSavedProfile() {
 
 function readSavedAttempts(): Attempt[] {
   try {
-    const saved = localStorage.getItem("lumi-attempts");
+    const saved = localStorage.getItem("calibrat8-attempts");
     return saved ? JSON.parse(saved) as Attempt[] : [];
   } catch {
     return [];
@@ -656,11 +698,26 @@ function readSavedAttempts(): Attempt[] {
 function readSavedPage(): Page {
   const availablePages: Page[] = ["home", "tutor", "planner", "lessons", "ingest", "generation", "library", "notes", "flashcards", "quiz", "knowledge", "recommendations", "report", "settings", "coach", "progress"];
   try {
-    const saved = localStorage.getItem("lumi-last-page") as Page | null;
+    const saved = localStorage.getItem("calibrat8-last-page") as Page | null;
     return saved && availablePages.includes(saved) ? saved : "home";
   } catch {
     return "home";
   }
+}
+
+function MascotFlightOverlay({ onEnd }: { onEnd: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onEnd, 2400);
+    return () => clearTimeout(timer);
+  }, [onEnd]);
+
+  return (
+    <div className="mascot-flight-overlay">
+      <div className="mascot-flight-container">
+        <Calibrat8Mascot size="large" expression="excited" />
+      </div>
+    </div>
+  );
 }
 
 function ProfileSetup({ initial, editing, returning, onComplete, onCancel, onResume, onStartNew }: {
@@ -790,20 +847,22 @@ function ProfileSetup({ initial, editing, returning, onComplete, onCancel, onRes
 
   return <div className="onboarding-shell">
     <header className="onboarding-header">
-      <button className="brand" aria-label="Lumi home"><span className="brand-mark"><Icon name="spark" size={18}/></span><span>Lumi</span></button>
+      <button className="brand" aria-label="Calibrat8 home"><span className="brand-mark"><Icon name="spark" size={18}/></span><span>Calibrat8</span></button>
       <div className="onboarding-progress" aria-label={`Setup step ${step + 1} of 5`}><span style={{ width: `${(step + 1) * 20}%` }}/></div>
       <span className="setup-count">{step + 1} of 5</span>
     </header>
 
     {step === 0 && <main className="welcome-step">
       <div className="welcome-lumi"><div className="welcome-glow"/><Lumi size="large"/></div>
-      <Badge tone="peach">{returning ? "WELCOME BACK" : "MEET LUMI"}</Badge>
+      <Badge tone="peach">{returning ? "WELCOME BACK" : "WELCOME TO CALIBRAT8"}</Badge>
       <h1>{returning ? `Ready when you are, ${initial.name.trim().split(" ")[0] || "Learner"}.` : "A little light for every learning moment."}</h1>
       <p>{returning ? "Resume where you stopped, review your learning preferences, or begin a fresh journey. Nothing changes until you choose." : "Tell us a little about how you study. We’ll use your choices to make recommendations more relevant—and you can change them anytime."}</p>
       <div className="welcome-promises"><span><Icon name="check"/><strong>{returning ? "Progress saved" : "About 2 minutes"}</strong></span><span><Icon name="offline"/><strong>Works offline</strong></span><span><Icon name="edit"/><strong>Always editable</strong></span></div>
       {returning ? <div className="returning-actions">
-        <Button onClick={onResume} icon="play">Resume my learning</Button>
-        <Button variant="secondary" onClick={() => setStep(1)} icon="edit">Review personalization</Button>
+        <div className="returning-buttons-row">
+          <Button onClick={onResume} icon="play">Resume my learning</Button>
+          <Button variant="secondary" onClick={() => setStep(1)} icon="edit">Review personalization</Button>
+        </div>
         <button className="new-journey-button" onClick={() => { onStartNew(); setProfile(defaultProfile); setTopicFiles([]); setTopicMethod("text"); setStep(1); }}><Icon name="plus"/><span><strong>Start a new learning journey</strong><small>Clear the saved profile and learning history on this device</small></span><Icon name="chevron"/></button>
       </div> : <>
         <Button onClick={() => setStep(1)} icon="arrow">Set up my learning space</Button>
@@ -814,7 +873,7 @@ function ProfileSetup({ initial, editing, returning, onComplete, onCancel, onRes
     {step === 1 && <main className="setup-card">
       <div className="setup-heading"><Badge tone="blue">ABOUT YOU</Badge><h1>Let’s make this space yours.</h1><p>We only need enough detail to organize subjects and suggest useful next steps.</p></div>
       <div className="setup-form">
-        <label className="setup-field"><span>What should Lumi call you?</span><input value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} placeholder="Your name"/></label>
+        <label className="setup-field"><span>What should Calibrat8 call you?</span><input value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} placeholder="Your name"/></label>
         <label className="setup-field"><span>Age range</span><select value={profile.level} onChange={e => setProfile({ ...profile, level: e.target.value })}><option>Under 13</option><option>13–17</option><option>18–24</option><option>25–34</option><option>35–49</option><option>50 or older</option><option>Prefer not to say</option></select></label>
         <div className="setup-field"><span>Your interests <small>Choose up to four</small></span><div className="choice-grid">{["Science & nature", "Math & logic", "History & culture", "Languages", "Technology", "Arts & creativity"].map(interest => <button key={interest} className={profile.subjects.includes(interest) ? "selected" : ""} onClick={() => toggleSubject(interest)}><span>{interest.slice(0, 2)}</span>{interest}{profile.subjects.includes(interest) && <Icon name="check" size={15}/>}</button>)}</div><input aria-label="Add a custom interest" placeholder="Add another interest and press Enter…" disabled={profile.subjects.length >= 4} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const interest = e.currentTarget.value.trim(); if (interest && !profile.subjects.includes(interest)) { toggleSubject(interest); e.currentTarget.value = ""; } } }}/></div>
       </div>
@@ -856,7 +915,7 @@ function ProfileSetup({ initial, editing, returning, onComplete, onCancel, onRes
 
     {step === 3 && <main className="setup-card">
       <div className="completion-lumi topic-welcome-lumi"><Lumi size="large"/></div>
-      <div className="setup-heading"><Badge tone="peach">LUMI IS READY TO HELP</Badge><h1>Hi! What would you like to learn?</h1><p>I’m happy you’re here. Type a topic, tell me by voice, show me a photo, or choose a file—we’ll take it one step at a time.</p></div>
+      <div className="setup-heading"><Badge tone="peach">CALIBRAT8 IS READY TO HELP</Badge><h1>Hi! What would you like to learn?</h1><p>I’m happy you’re here. Type a topic, tell me by voice, show me a photo, or choose a file—we’ll take it one step at a time.</p></div>
       <section className="setup-form">
         <div className="source-tabs" role="tablist" aria-label="Choose how to add a topic">
           <button role="tab" aria-selected={topicMethod === "text"} className={topicMethod === "text" ? "active" : ""} onClick={() => setTopicMethod("text")}><Icon name="edit"/> Text</button>
@@ -869,7 +928,7 @@ function ProfileSetup({ initial, editing, returning, onComplete, onCancel, onRes
           <Badge tone={isRecording ? "peach" : "neutral"}>{isRecording ? `RECORDING · ${Math.floor(recordingSeconds / 60)}:${String(recordingSeconds % 60).padStart(2, "0")}` : "VOICE INPUT"}</Badge>
           <span className="drop-icon voice-mic"><Icon name="mic" size={24}/><i/></span>
           <strong>{isRecording ? "I’m listening…" : "Record your topic"}</strong>
-          <p>{isRecording ? "Describe what you want to learn. Speak naturally and stop when you’re finished." : "Use your microphone to tell Lumi what you want to learn."}</p>
+          <p>{isRecording ? "Describe what you want to learn. Speak naturally and stop when you’re finished." : "Use your microphone to tell Calibrat8 what you want to learn."}</p>
           <div className={`voice-waveform ${isRecording ? "active" : ""}`} aria-hidden="true">{Array.from({ length: 24 }).map((_, index) => <i key={index}/>)}</div>
           {isRecording ? <Button variant="secondary" onClick={stopVoiceRecording} icon="stop">Stop recording</Button> : <Button onClick={startVoiceRecording} icon="mic">Start recording</Button>}
           {recordingError && <small className="recording-error" role="alert">{recordingError}</small>}
@@ -884,7 +943,7 @@ function ProfileSetup({ initial, editing, returning, onComplete, onCancel, onRes
     </main>}
 
     {step === 4 && <main className="setup-card">
-      <div className="setup-heading"><Badge tone="peach">PERSONALIZATION</Badge><h1>How do you like to learn?</h1><p>Choose a starting preference. Lumi can still explain something differently whenever you ask.</p></div>
+      <div className="setup-heading"><Badge tone="peach">PERSONALIZATION</Badge><h1>How do you like to learn?</h1><p>Choose a starting preference. Calibrat8 can still explain something differently whenever you ask.</p></div>
       <div className="learning-styles">{[
         ["Learn", "Build understanding with key notes, explanations, and guided examples.", "book"],
         ["Practice", "Answer targeted questions and get immediate feedback on each concept.", "quiz"],
@@ -910,6 +969,24 @@ function OfflineModal({ online, close, toggle }: { online: boolean; close: () =>
 
 export default function App() {
   const savedProfile = readSavedProfile();
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    try {
+      const saved = localStorage.getItem("calibrat8-theme");
+      if (saved === "dark" || saved === "light") return saved;
+      return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    } catch {
+      return "dark";
+    }
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try {
+      localStorage.setItem("calibrat8-theme", theme);
+    } catch {}
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === "dark" ? "light" : "dark");
   const [page, setPage] = useState<Page>(readSavedPage);
   const [online, setOnline] = useState(true);
   const [offlineOpen, setOfflineOpen] = useState(false);
@@ -919,21 +996,23 @@ export default function App() {
   const [setupOpen, setSetupOpen] = useState(true);
   const [returningLearner, setReturningLearner] = useState(Boolean(savedProfile));
   const [editingProfile, setEditingProfile] = useState(false);
+  const [isFlying, setIsFlying] = useState(false);
   useEffect(() => {
-    localStorage.setItem("lumi-last-page", page);
+    localStorage.setItem("calibrat8-last-page", page);
   }, [page]);
   const saveProfile = (nextProfile: ProfileData) => {
     setProfile(nextProfile);
-    localStorage.setItem("lumi-profile", JSON.stringify(nextProfile));
+    localStorage.setItem("calibrat8-profile", JSON.stringify(nextProfile));
     setReturningLearner(true);
     setSetupOpen(false);
     setEditingProfile(false);
+    setIsFlying(true);
   };
   const startNewJourney = () => {
-    localStorage.removeItem("lumi-profile");
+    localStorage.removeItem("calibrat8-profile");
     localStorage.removeItem("studypath-profile");
-    localStorage.removeItem("lumi-attempts");
-    localStorage.removeItem("lumi-last-page");
+    localStorage.removeItem("calibrat8-attempts");
+    localStorage.removeItem("calibrat8-last-page");
     setProfile(defaultProfile);
     setAttempts([]);
     setLatestAttempt(null);
@@ -944,7 +1023,7 @@ export default function App() {
     const next = [...attempts, attempt];
     setAttempts(next);
     setLatestAttempt(attempt);
-    localStorage.setItem("lumi-attempts", JSON.stringify(next));
+    localStorage.setItem("calibrat8-attempts", JSON.stringify(next));
     setPage("completion");
   };
   const completeStudy = (score: number, total: number) => saveAttempt({
@@ -964,8 +1043,8 @@ export default function App() {
     settings: "Settings", coach: "Learning Coach", progress: "Practice & Progress",
   };
   return <div className="app-shell">
-    <Sidebar page={page} setPage={setPage} online={online} setOnline={setOnline} profile={profile} editProfile={() => { setEditingProfile(true); setSetupOpen(true); }}/>
-    <main className="main-shell"><Topbar title={titles[page]} online={online} setOnline={setOnline}/>
+    <Sidebar page={page} setPage={setPage} online={online} setOnline={setOnline} profile={profile} editProfile={() => { setEditingProfile(true); setSetupOpen(true); }} theme={theme} toggleTheme={toggleTheme}/>
+    <main className="main-shell"><Topbar title={titles[page]} online={online} setOnline={setOnline} theme={theme} toggleTheme={toggleTheme}/>
       {page === "home" && <Home go={setPage} online={online} openOffline={() => setOfflineOpen(true)} profile={profile}/>}
       {page === "tutor" && <Tutor online={online}/>}
       {page === "planner" && <Planner start={() => setPage("focus")}/>}
@@ -980,11 +1059,12 @@ export default function App() {
       {page === "knowledge" && <KnowledgeMap attempt={latestAttempt} recommendations={() => setPage("recommendations")}/>}
       {page === "recommendations" && <Recommendations attempt={latestAttempt} start={() => setPage("focus")} library={() => setPage("library")}/>}
       {page === "report" && <ComparisonReport attempts={attempts} takeQuiz={() => setPage("quiz")}/>}
-      {page === "settings" && <Settings online={online} setOnline={setOnline} profile={profile} editProfile={() => { setEditingProfile(true); setSetupOpen(true); }}/>}
+      {page === "settings" && <Settings online={online} setOnline={setOnline} profile={profile} editProfile={() => { setEditingProfile(true); setSetupOpen(true); }} theme={theme} setTheme={setTheme}/>}
       {page === "progress" && <Progress openCoach={() => setPage("coach")}/>}
       {page === "coach" && <Coach back={() => setPage("progress")}/>}
     </main>
     <MobileNav page={page} setPage={setPage}/>
     {offlineOpen && <OfflineModal online={online} close={() => setOfflineOpen(false)} toggle={() => setOnline(true)}/>}
+    {isFlying && <MascotFlightOverlay onEnd={() => setIsFlying(false)} />}
   </div>;
 }

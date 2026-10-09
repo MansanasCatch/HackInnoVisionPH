@@ -40,21 +40,22 @@ def _find_listening_pids(port: int) -> set[int]:
     """Return the PIDs of every process listening on ``port``."""
     pids: set[int] = set()
     try:
-        connections = psutil.net_connections(kind="inet")
-    except psutil.AccessDenied:
-        # Some platforms (e.g. macOS) require elevated rights for a global scan;
-        # fall back to inspecting each process we are allowed to see.
-        connections = []
-        for proc in psutil.process_iter(["pid"]):
-            try:
-                connections.extend(proc.net_connections(kind="inet"))
-            except (psutil.AccessDenied, psutil.NoSuchProcess, psutil.ZombieProcess):
-                continue
+        for conn in psutil.net_connections(kind="inet"):
+            if conn.status == psutil.CONN_LISTEN and conn.laddr and conn.laddr.port == port and conn.pid:
+                pids.add(conn.pid)
+        return pids
+    except (psutil.AccessDenied, psutil.Error):
+        pass
 
-    for conn in connections:
-        is_listener = conn.status == psutil.CONN_LISTEN and conn.laddr
-        if is_listener and conn.laddr.port == port and conn.pid:
-            pids.add(conn.pid)
+    # Fallback for platforms like macOS where net_connections requires root
+    for proc in psutil.process_iter(["pid"]):
+        try:
+            for conn in proc.net_connections(kind="inet"):
+                if conn.status == psutil.CONN_LISTEN and conn.laddr and conn.laddr.port == port:
+                    pids.add(proc.pid)
+        except (psutil.AccessDenied, psutil.NoSuchProcess, psutil.ZombieProcess):
+            continue
+
     return pids
 
 
