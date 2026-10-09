@@ -1,0 +1,11 @@
+{
+  "title": "Local Tutor App",
+  "description": "Empowers students with an AI-driven tutor, personalized study plans, lesson recording, and adaptive coaching to enhance learning anytime, even offline.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
