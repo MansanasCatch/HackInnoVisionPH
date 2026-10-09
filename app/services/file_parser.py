@@ -36,20 +36,41 @@ def parse_uploaded_file(
         return _parse_text(filename, content_bytes, ext or "txt")
 
 
+def _extract_text_from_image(content_bytes: bytes) -> str:
+    """Extract text from image bytes using RapidOCR."""
+    try:
+        from rapidocr_onnxruntime import RapidOCR
+
+        ocr = RapidOCR()
+        result, _ = ocr(content_bytes)
+        if result:
+            lines = [item[1].strip() for item in result if len(item) > 1 and item[1].strip()]
+            if lines:
+                return "\n".join(lines)
+    except Exception as err:
+        logger.warning("RapidOCR extraction failed: %s", err)
+
+    return "[No readable text detected in image]"
+
+
 def _parse_image(filename: str, content_bytes: bytes, content_type: str) -> ExtractedFileContent:
-    """Parse image into base64 data payload and descriptive text."""
+    """Parse image into base64 data payload and extract text via OCR."""
     b64 = base64.b64encode(content_bytes).decode("utf-8")
-    desc = (
-        f"[Image File Attached: {filename} ({len(content_bytes)} bytes)]\n"
-        "(Base64 data ready for multimodal vision inference)"
-    )
+    ocr_text = _extract_text_from_image(content_bytes)
+
+    desc_lines = [
+        f"[Image File: {filename} ({len(content_bytes)} bytes)]",
+        "--- OCR Extracted Text ---",
+        ocr_text,
+    ]
+    extracted = "\n".join(desc_lines)
 
     return ExtractedFileContent(
         filename=filename,
         file_type="image",
         content_type=content_type,
-        character_count=len(desc),
-        extracted_text=desc,
+        character_count=len(extracted),
+        extracted_text=extracted,
         base64_data=b64,
     )
 

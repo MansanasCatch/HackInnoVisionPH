@@ -2,13 +2,15 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.api.deps import LocalAIServiceDep
 from app.schemas.ai import (
     AIGenerateRequest,
     AIGenerateResponse,
 )
+
+MAX_TOTAL_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
 
 router = APIRouter(prefix="/ai", tags=["Local AI & File Ingestion"])
 
@@ -35,7 +37,21 @@ def generate_text_with_local_ai(
 )
 async def generate_with_files(
     service: LocalAIServiceDep,
-    prompt: Annotated[str, Form(description="Prompt text or question for the AI")],
+    prompt: Annotated[
+        str,
+        Form(
+            description=(
+                "Prompt text or question for the AI. If left empty, dynamically auto-generated "
+                "from the topic and uploaded documents."
+            )
+        ),
+    ] = "",
+    topic: Annotated[
+        str | None,
+        Form(
+            description="Topic from user UI (e.g. 'Cell division'). Auto-inferred if blank."
+        ),
+    ] = None,
     onboarding_id: Annotated[int | None, Form(description="Onboarding account ID")] = None,
     model_override: Annotated[str | None, Form(description="Optional model tag override")] = None,
     system_prompt: Annotated[str | None, Form(description="Optional system prompt")] = None,
@@ -45,20 +61,27 @@ async def generate_with_files(
         UploadFile | list[UploadFile] | None,
         File(description="Attached document or image file to ingest"),
     ] = None,
-
 ) -> AIGenerateResponse:
     """Generate Local AI response grounded by attached file contents."""
     uploaded_files: list[tuple[str, bytes, str | None]] = []
+    total_bytes = 0
 
     if files:
         file_list = files if isinstance(files, list) else [files]
         for f in file_list:
             if f and f.filename:
                 content = await f.read()
+                total_bytes += len(content)
+                if total_bytes > MAX_TOTAL_FILE_SIZE_BYTES:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Total uploaded files exceed the 25 MB limit.",
+                    )
                 uploaded_files.append((f.filename, content, f.content_type))
 
     req = AIGenerateRequest(
         prompt=prompt,
+        topic=topic,
         onboarding_id=onboarding_id,
         model_override=model_override,
         system_prompt=system_prompt,
@@ -67,5 +90,3 @@ async def generate_with_files(
     )
 
     return service.generate(request=req, uploaded_files=uploaded_files)
-
-
