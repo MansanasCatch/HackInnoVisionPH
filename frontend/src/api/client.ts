@@ -131,6 +131,31 @@ export const api = {
     return handleResponse<import("./types").AIGenerateResponse>(res);
   },
 
+  /** POST /ai/generate-with-files — multipart; files are optional (text_context alone works). */
+  async aiGenerateWithFiles(
+    data: import("./types").AIGenerateRequest & { files?: File[] },
+  ): Promise<import("./types").AIGenerateResponse> {
+    const { files, ...fields } = data;
+    const form = new FormData();
+    Object.entries(fields).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") form.append(key, String(value));
+    });
+    (files || []).forEach((file) => form.append("files", file));
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000); // local LLMs can be slow
+    try {
+      const res = await fetch(`${BASE_URL}/ai/generate-with-files`, {
+        method: "POST",
+        body: form,
+        signal: controller.signal,
+      });
+      return await handleResponse<import("./types").AIGenerateResponse>(res);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  },
+
   // Onboarding
   async createOnboarding(data: OnboardingCreate): Promise<OnboardingProfile> {
     const res = await request(`${BASE_URL}/onboarding`, jsonInit("POST", data));

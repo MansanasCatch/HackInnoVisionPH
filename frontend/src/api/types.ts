@@ -300,17 +300,22 @@ export interface AIGenerateRequest {
   onboarding_id?: number;
   model_override?: string;
   system_prompt?: string;
+  text_context?: string;
   temperature?: number;
+  max_tokens?: number;
 }
 
 export interface AIGenerateResponse {
-  response: string;
   model_used: string;
-  prompt_tokens?: number | null;
-  completion_tokens?: number | null;
-  total_tokens?: number | null;
-  execution_time_seconds: number;
+  /** Raw model output (JSON string in study mode). Prefer `study_materials`. */
+  response_text: string;
+  prompt: string;
+  attached_files_count: number;
+  ingested_files: ExtractedFileContent[];
   is_ollama_online: boolean;
+  execution_time_seconds: number;
+  study_materials: StudyMaterialsResponse | null;
+  warnings: string[];
 }
 
 export interface ExtractedFileContent {
