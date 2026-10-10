@@ -377,10 +377,10 @@ function Home({ go, online, openOffline, profile }: { go: (p: Page) => void; onl
 
     <section className="section-block">
       <div className="section-heading"><div><p className="eyebrow">START HERE</p><h3>Choose your next step</h3></div></div>
-      <div className="quick-grid">
-        <button className="quick-card coral" onClick={() => go("ingest")}><span className="quick-icon"><Icon name="plus"/></span><span><strong>Create Learning Resources</strong><small>Turn text, voice, photos, or files into a learning set.</small></span><Icon name="arrow"/></button>
-        <button className="quick-card sage" onClick={() => go("planner")}><span className="quick-icon"><Icon name="play"/></span><span><strong>Study Mode</strong><small>Choose Learn, Practice, or Review and begin a focused session.</small></span><Icon name="arrow"/></button>
-        <button className="quick-card blue" onClick={() => go("report")}><span className="quick-icon"><Icon name="chart"/></span><span><strong>Report Learning</strong><small>See weekly progress, strengths, and topics that need more practice.</small></span><Icon name="arrow"/></button>
+      <div className="quick-grid" role="group" aria-label="Learning shortcuts">
+        <button type="button" aria-label="Create Learning Resources. Turn text, voice, photos, or files into a learning set." className="quick-card coral group relative focus-visible:ring-4 focus-visible:ring-[var(--peach-pale)]" onClick={() => go("ingest")}><span aria-hidden="true" className="quick-icon transition-transform duration-200 group-hover:rotate-6 group-hover:scale-110 motion-reduce:transition-none"><Icon name="plus"/></span><span><span className="badge badge-peach">MAKE SOMETHING</span><strong className="transition-colors group-hover:text-[var(--sage-dark)]">Create Learning Resources</strong><small>Turn text, voice, photos, or files into a learning set.</small></span><span aria-hidden="true" className="ml-auto text-[var(--muted)] transition-transform duration-200 group-hover:translate-x-1 group-hover:text-[var(--sage)] motion-reduce:transition-none"><Icon name="arrow"/></span></button>
+        <button type="button" aria-label="Open Study Mode. Choose Learn, Practice, or Review and begin a focused session." className="quick-card sage group relative focus-visible:ring-4 focus-visible:ring-[var(--sage-pale)]" onClick={() => go("planner")}><span aria-hidden="true" className="quick-icon transition-transform duration-200 group-hover:scale-110 motion-reduce:transition-none"><Icon name="play"/></span><span><span className="badge">JUMP BACK IN</span><strong className="transition-colors group-hover:text-[var(--sage-dark)]">Study Mode</strong><small>Choose Learn, Practice, or Review and begin a focused session.</small></span><span aria-hidden="true" className="ml-auto text-[var(--muted)] transition-transform duration-200 group-hover:translate-x-1 group-hover:text-[var(--sage)] motion-reduce:transition-none"><Icon name="arrow"/></span></button>
+        <button type="button" aria-label="View Learning Report. See weekly progress, strengths, and topics that need more practice." className="quick-card blue group relative focus-visible:ring-4 focus-visible:ring-[var(--blue-pale)]" onClick={() => go("report")}><span aria-hidden="true" className="quick-icon transition-transform duration-200 group-hover:-rotate-6 group-hover:scale-110 motion-reduce:transition-none"><Icon name="chart"/></span><span><span className="badge badge-blue">SEE YOUR GROWTH</span><strong className="transition-colors group-hover:text-[var(--sage-dark)]">Report Learning</strong><small>See weekly progress, strengths, and topics that need more practice.</small></span><span aria-hidden="true" className="ml-auto text-[var(--muted)] transition-transform duration-200 group-hover:translate-x-1 group-hover:text-[var(--sage)] motion-reduce:transition-none"><Icon name="arrow"/></span></button>
       </div>
     </section>
 
@@ -513,14 +513,14 @@ function Focus({ exit, completeSession }: { exit: () => void; completeSession: (
   const [flipped, setFlipped] = useState(false);
   const [answer, setAnswer] = useState<number | null>(null);
   return <div className="focus-shell">
-    <header className="focus-header"><button className="brand" onClick={exit}><span className="brand-mark"><Icon name="spark" size={18}/></span><span>Lumi</span></button><div className="focus-progress"><span><strong>Quadratic equations</strong><small>Activity {step + 1} of 3 · {25 - step * 8} min remaining</small></span><div><i style={{ width: `${(step + 1) * 33}%` }}/></div></div><Button onClick={() => setPaused(!paused)} variant="secondary" icon={paused ? "play" : "pause"}>{paused ? "Resume" : "Pause"}</Button></header>
-    <main className="focus-main">
+    <header className="focus-header"><button className="brand" onClick={exit}><span className="brand-mark"><Icon name="spark" size={18}/></span><span>Calibrat8</span></button><div className="focus-progress"><span><strong>Quadratic equations</strong><small>Activity {step + 1} of 3 · {25 - step * 8} min remaining</small></span><div><i style={{ width: `${(step + 1) * 33}%` }}/></div></div><Button onClick={() => setPaused(!paused)} variant="secondary" icon={paused ? "play" : "pause"}>{paused ? "Resume" : "Pause"}</Button></header>
+    <main className="focus-main" aria-label={`Study activity ${step + 1} of 3`}>
       {paused ? <div className="pause-state"><div className="complete-mark"><Icon name="pause"/></div><h2>Session paused.</h2><p>Take the time you need. Your place is saved on this device.</p><Button onClick={() => setPaused(false)} icon="play">Resume when ready</Button></div> :
-      <><div className="focus-kicker"><span>ACTIVITY {step + 1}</span><Badge tone="blue">{step === 0 ? "CONCEPT" : step === 1 ? "FLASHCARD" : "QUICK CHECK"}</Badge></div>
-      {step === 0 && <article className="learning-card"><p className="eyebrow">THE KEY IDEA</p><h2>Undo each operation in reverse order.</h2><p>To isolate <b>x</b>, treat the equation like a wrapped gift. Remove the outermost “layer” first, and do the same thing to both sides.</p><div className="equation"><span>2x + 6 = 18</span><Icon name="arrow"/><span>2x = 12</span><Icon name="arrow"/><span>x = 6</span></div><div className="callout"><Icon name="spark"/><p><strong>Notice the order:</strong> subtract 6 first, then divide by 2. This reverses the original operations.</p></div></article>}
-      {step === 1 && <button className={`flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)}><span className="eyebrow">{flipped ? "ANSWER" : "TAP TO REVEAL"}</span><strong>{flipped ? "Apply the inverse operation to both sides." : "How do you keep an equation balanced?"}</strong><small>{flipped ? "Whatever you do to one side, do to the other." : "Think about the balance-scale analogy."}</small></button>}
-      {step === 2 && <article className="learning-card quiz-card"><p className="eyebrow">TRY THIS</p><h2>What is the first step to solve 3x − 4 = 11?</h2>{["Divide both sides by 3", "Add 4 to both sides", "Subtract 11 from both sides"].map((x, i) => <button key={x} className={`answer-option ${answer === i ? "selected" : ""}`} onClick={() => setAnswer(i)} aria-pressed={answer === i}><span>{String.fromCharCode(65 + i)}</span>{x}</button>)}</article>}
-      <div className="focus-footer"><p>{step === 0 ? "Read at your own pace." : step === 1 ? "Retrieval practice strengthens memory." : "Choose the best first step."}</p><Button disabled={step === 2 && answer === null} onClick={() => step === 2 ? completeSession(answer === 1 ? 1 : 0, 1) : setStep(step + 1)} icon="arrow">{step === 2 ? "Finish session" : "Next"}</Button></div></>}
+      <><div className="focus-kicker"><span>ACTIVITY {step + 1}</span><div className="flex items-center gap-2"><span className="flex gap-1.5" aria-label={`${step + 1} of 3 activities complete`}>{[0, 1, 2].map(index => <i key={index} aria-hidden="true" className={`block h-1.5 rounded-full transition-all duration-300 motion-reduce:transition-none ${index === step ? "w-6 bg-[var(--sage)]" : index < step ? "w-1.5 bg-[var(--blue)]" : "w-1.5 bg-[var(--line)]"}`}/>)}</span><Badge tone="blue">{step === 0 ? "CONCEPT" : step === 1 ? "FLASHCARD" : "QUICK CHECK"}</Badge></div></div>
+      {step === 0 && <article className="learning-card transition-transform duration-300 hover:-translate-y-0.5 motion-reduce:transition-none"><p className="eyebrow">THE KEY IDEA</p><h2>Undo each operation in reverse order.</h2><p>To isolate <b>x</b>, treat the equation like a wrapped gift. Remove the outermost “layer” first, and do the same thing to both sides.</p><div className="equation group"><span className="rounded-lg px-2 py-1 transition-colors group-hover:bg-[var(--peach-pale)]">2x + 6 = 18</span><Icon name="arrow"/><span className="rounded-lg px-2 py-1 transition-colors group-hover:bg-[var(--blue-pale)]">2x = 12</span><Icon name="arrow"/><span className="rounded-lg bg-[var(--sage-pale)] px-2 py-1 text-[var(--sage-dark)] transition-transform group-hover:scale-110 motion-reduce:transition-none">x = 6</span></div><div className="callout"><Icon name="spark"/><p><strong>Notice the order:</strong> subtract 6 first, then divide by 2. This reverses the original operations.</p></div></article>}
+      {step === 1 && <button type="button" aria-pressed={flipped} aria-label={`${flipped ? "Answer shown" : "Question shown"}. ${flipped ? "Apply the inverse operation to both sides. Tap to show the question." : "How do you keep an equation balanced? Tap to reveal the answer."}`} className={`flashcard group ${flipped ? "flipped" : ""} focus-visible:ring-4 focus-visible:ring-[var(--sage-pale)]`} onClick={() => setFlipped(!flipped)}><span className="eyebrow">{flipped ? "ANSWER REVEALED" : "TAP TO REVEAL"}</span><strong className="transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none">{flipped ? "Apply the inverse operation to both sides." : "How do you keep an equation balanced?"}</strong><small>{flipped ? "Whatever you do to one side, do to the other. Tap again to review the question." : "Think about the balance-scale analogy."}</small><span aria-hidden="true" className={`grid size-10 place-items-center rounded-full transition-transform duration-300 group-hover:rotate-180 motion-reduce:transition-none ${flipped ? "bg-white/15 text-white" : "bg-[var(--sage-pale)] text-[var(--sage)]"}`}><Icon name="more"/></span></button>}
+      {step === 2 && <article className="learning-card quiz-card"><p className="eyebrow">TRY THIS</p><h2>What is the first step to solve 3x − 4 = 11?</h2>{["Divide both sides by 3", "Add 4 to both sides", "Subtract 11 from both sides"].map((x, i) => <button type="button" key={x} className={`answer-option group transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--sage)]! hover:bg-[var(--mist)]! hover:shadow-sm active:scale-95 motion-reduce:transition-none ${answer === i ? "selected" : ""}`} onClick={() => setAnswer(i)} aria-pressed={answer === i} aria-label={`${String.fromCharCode(65 + i)}. ${x}${answer === i ? ", selected" : ""}`}><span className="transition-transform duration-200 group-hover:scale-110 motion-reduce:transition-none">{String.fromCharCode(65 + i)}</span>{x}</button>)}{answer !== null && <div className={`callout mt-4 ${answer === 1 ? "" : "bg-[var(--peach-pale)]! text-[var(--peach)]!"}`} role="status" aria-live="polite"><Icon name={answer === 1 ? "check" : "spark"}/><p><strong>{answer === 1 ? "That’s it." : "Good try—look at the outermost operation."}</strong> {answer === 1 ? "Adding 4 to both sides removes the −4 while keeping the equation balanced." : "Undo subtraction before dividing by the coefficient."}</p></div>}</article>}
+      <div className="focus-footer"><p aria-live="polite">{step === 0 ? "Explore the equation, then continue when you’re ready." : step === 1 ? flipped ? "Nice recall. Review the question or move on." : "Flip the card and test your memory." : answer === null ? "Choose the best first step." : answer === 1 ? "Correct—ready to finish." : "You can try another answer or finish to review."}</p><div className="flex gap-2">{step > 0 && <Button variant="secondary" onClick={() => { if (step === 1) setFlipped(false); if (step === 2) setAnswer(null); setStep(step - 1); }}>Back</Button>}<Button disabled={step === 2 && answer === null} onClick={() => { if (step === 2) completeSession(answer === 1 ? 1 : 0, 1); else { if (step === 0) setFlipped(false); if (step === 1) setAnswer(null); setStep(step + 1); } }} icon="arrow">{step === 2 ? "Finish session" : "Next activity"}</Button></div></div></>}
     </main>
   </div>;
 }
@@ -594,11 +594,11 @@ function ContentIngestion({ online, done }: { online: boolean; done: (next?: "li
     <div className="ingestion-grid">
       <section className="panel ingest-source">
         <label className="setup-field"><span>Topic</span><input value={topic} onChange={e => setTopic(e.target.value)} placeholder="For example: Cell division, budgeting, or Spanish basics"/></label>
-        <div className="source-tabs" role="tablist" aria-label="Choose how to add learning material">
-          <button role="tab" aria-selected={inputMethod === "text"} className={inputMethod === "text" ? "active" : ""} onClick={() => setInputMethod("text")}><Icon name="edit"/> Text</button>
-          <button role="tab" aria-selected={inputMethod === "voice"} className={inputMethod === "voice" ? "active" : ""} onClick={() => setInputMethod("voice")}><Icon name="mic"/> Voice</button>
-          <button role="tab" aria-selected={inputMethod === "camera"} className={inputMethod === "camera" ? "active" : ""} onClick={() => setInputMethod("camera")}><Icon name="image"/> Camera</button>
-          <button role="tab" aria-selected={inputMethod === "files"} className={inputMethod === "files" ? "active" : ""} onClick={() => setInputMethod("files")}><Icon name="upload"/> Files</button>
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-[var(--line)] bg-[var(--mist)] p-2 sm:grid-cols-4" role="tablist" aria-label="Choose how to add learning material">
+          <button type="button" role="tab" aria-selected={inputMethod === "text"} aria-describedby="material-text-description" className={`group flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 motion-reduce:transition-none ${inputMethod === "text" ? "border-[var(--sage)] bg-[var(--sage)] text-white! shadow-md" : "border-transparent bg-[var(--paper)] text-[var(--muted)] hover:-translate-y-0.5 hover:border-[var(--sage)] hover:text-[var(--sage-dark)] hover:shadow-sm motion-reduce:hover:translate-y-0"}`} onClick={() => setInputMethod("text")}><span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-lg ${inputMethod === "text" ? "bg-white/15 text-white!" : "bg-[var(--sage-pale)] text-[var(--sage)]"}`}><Icon name="edit"/></span><span className="grid gap-0.5"><strong className="text-sm">Type it</strong><small id="material-text-description" className={`text-xs ${inputMethod === "text" ? "text-white" : "text-[var(--muted)]"}`}>Write a topic</small></span></button>
+          <button type="button" role="tab" aria-selected={inputMethod === "voice"} aria-describedby="material-voice-description" className={`group flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 motion-reduce:transition-none ${inputMethod === "voice" ? "border-[var(--sage)] bg-[var(--sage)] text-white! shadow-md" : "border-transparent bg-[var(--paper)] text-[var(--muted)] hover:-translate-y-0.5 hover:border-[var(--sage)] hover:text-[var(--sage-dark)] hover:shadow-sm motion-reduce:hover:translate-y-0"}`} onClick={() => setInputMethod("voice")}><span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-lg ${inputMethod === "voice" ? "bg-white/15 text-white!" : "bg-[var(--peach-pale)] text-[var(--peach)]"}`}><Icon name="mic"/></span><span className="grid gap-0.5"><strong className="text-sm">Say it</strong><small id="material-voice-description" className={`text-xs ${inputMethod === "voice" ? "text-white" : "text-[var(--muted)]"}`}>Use your voice</small></span></button>
+          <button type="button" role="tab" aria-selected={inputMethod === "camera"} aria-describedby="material-camera-description" className={`group flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 motion-reduce:transition-none ${inputMethod === "camera" ? "border-[var(--sage)] bg-[var(--sage)] text-white! shadow-md" : "border-transparent bg-[var(--paper)] text-[var(--muted)] hover:-translate-y-0.5 hover:border-[var(--sage)] hover:text-[var(--sage-dark)] hover:shadow-sm motion-reduce:hover:translate-y-0"}`} onClick={() => setInputMethod("camera")}><span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-lg ${inputMethod === "camera" ? "bg-white/15 text-white!" : "bg-[var(--blue-pale)] text-[var(--blue)]"}`}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5 10.5 3h3L15 5h3a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3Z"/><circle cx="12" cy="12.5" r="4"/></svg></span><span className="grid gap-0.5"><strong className="text-sm">Snap it</strong><small id="material-camera-description" className={`text-xs ${inputMethod === "camera" ? "text-white" : "text-[var(--muted)]"}`}>Take a photo</small></span></button>
+          <button type="button" role="tab" aria-selected={inputMethod === "files"} aria-describedby="material-file-description" className={`group flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 motion-reduce:transition-none ${inputMethod === "files" ? "border-[var(--sage)] bg-[var(--sage)] text-white! shadow-md" : "border-transparent bg-[var(--paper)] text-[var(--muted)] hover:-translate-y-0.5 hover:border-[var(--sage)] hover:text-[var(--sage-dark)] hover:shadow-sm motion-reduce:hover:translate-y-0"}`} onClick={() => setInputMethod("files")}><span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-lg ${inputMethod === "files" ? "bg-white/15 text-white!" : "bg-[var(--sage-pale)] text-[var(--sage-dark)]"}`}><Icon name="upload"/></span><span className="grid gap-0.5"><strong className="text-sm">Add a file</strong><small id="material-file-description" className={`text-xs ${inputMethod === "files" ? "text-white" : "text-[var(--muted)]"}`}>Upload material</small></span></button>
         </div>
         {inputMethod === "text" && <div className="notes-input"><label htmlFor="material-notes">Free text</label><textarea id="material-notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder={"Paste notes, write an explanation, or add the information you want to study…\n\nTip: include enough detail for useful notes, flashcards, and questions."}/><span>{wordCount} words</span></div>}
         {inputMethod === "voice" && <label className="drop-zone compact-drop-zone">
@@ -735,7 +735,7 @@ function QuizViewer({ back, submit }: { back: () => void; submit: (attempt: Atte
 
 function SessionCompletion({ attempt, go }: { attempt: Attempt; go: (page: Page) => void }) {
   const percentage = Math.round((attempt.score / attempt.total) * 100);
-  return <div className="page completion-page"><section className="completion-card panel"><div className="completion-calibrat8"><Calibrat8 size="medium"/></div><Badge>SESSION COMPLETED</Badge><h2>{percentage === 100 ? "Wonderful focus—you understood every check." : "Nice progress. Every answer gives us a clearer next step."}</h2><p>Calibrat8 saved this result locally and used only your submitted answers to update the knowledge map.</p><div className="summary-stats"><span><strong>{attempt.score}/{attempt.total}</strong><small>Correct answers</small></span><span><strong>{attempt.concepts.filter(item => !item.correct).length}</strong><small>Topics to revisit</small></span><span><strong>Saved</strong><small>On this device</small></span></div><div className="recalc-state"><span><Icon name="check"/></span><p><strong>Knowledge map updated</strong><small>Recommendations now reflect this session’s evidence.</small></p></div><div className="completion-actions"><Button onClick={() => go("knowledge")} icon="layers">View knowledge map</Button><Button variant="secondary" onClick={() => go("recommendations")} icon="spark">See next steps</Button></div></section></div>;
+  return <div className="page completion-page"><section className="completion-card panel"><div className="completion-calibrat8 flying-calibrat8"><span className="calibrat8-art calibrat8-large" style={{ backgroundImage: 'url("/calibrat8-flying-laptop.png")', position: "relative", inset: "auto", margin: "0 auto" }} role="img" aria-label="Calibrat8 flying with a laptop"/></div><Badge>SESSION COMPLETED</Badge><h2>{percentage === 100 ? "Wonderful focus—you understood every check." : "Nice progress. Every answer gives us a clearer next step."}</h2><p>Calibrat8 saved this result locally and used only your submitted answers to update the knowledge map.</p><div className="summary-stats"><span><strong>{attempt.score}/{attempt.total}</strong><small>Correct answers</small></span><span><strong>{attempt.concepts.filter(item => !item.correct).length}</strong><small>Topics to revisit</small></span><span><strong>Saved</strong><small>On this device</small></span></div><div className="recalc-state"><span><Icon name="check"/></span><p><strong>Knowledge map updated</strong><small>Recommendations now reflect this session’s evidence.</small></p></div><div className="completion-actions"><Button onClick={() => go("knowledge")} icon="layers">View knowledge map</Button><Button variant="secondary" onClick={() => go("recommendations")} icon="spark">See next steps</Button></div></section></div>;
 }
 
 function KnowledgeMap({ attempt, recommendations }: { attempt: Attempt | null; recommendations: () => void }) {
@@ -748,7 +748,7 @@ function KnowledgeMap({ attempt, recommendations }: { attempt: Attempt | null; r
 
 function Recommendations({ attempt, start, library }: { attempt: Attempt | null; start: () => void; library: () => void }) {
   const gaps = attempt?.concepts.filter(item => !item.correct) || [];
-  return <div className="page recommendation-page"><button className="back-link" onClick={library}>← Learning Resources</button><section className="workflow-hero"><div><Badge tone="peach">ADAPTIVE PRACTICE</Badge><h2>{gaps.length ? "Let’s strengthen the parts that need another look." : "Your next step will appear here."}</h2><p>Recommendations use your latest submitted answers and preserve the original resource version.</p></div><Calibrat8 size="medium"/></section>
+  return <div className="page recommendation-page"><button className="back-link" onClick={library}>← Learning Resources</button><section className="workflow-hero"><div><Badge tone="peach">ADAPTIVE PRACTICE</Badge><h2>{gaps.length ? "Let’s strengthen the parts that need another look." : "Your next step will appear here."}</h2><p>Recommendations use your latest submitted answers and preserve the original resource version.</p></div><span className="calibrat8-art calibrat8-medium" style={{ backgroundImage: 'url("/calibrat8-flying-laptop.png")', backgroundSize: "contain", width: "120px", aspectRatio: "1374 / 1145", border: 0, borderRadius: 0, boxShadow: "none", filter: "drop-shadow(0 12px 16px rgba(30,38,71,.16))", animation: "calibrat8-flight 4.8s ease-in-out infinite" }} role="img" aria-label="Calibrat8 flying with a laptop"/></section>
     {!attempt ? <section className="empty-evidence panel"><div><Icon name="spark"/></div><h3>Complete one activity first</h3><p>Once Calibrat8 has real answer evidence, targeted notes, cards, and practice will appear here.</p><Button onClick={start} icon="play">Start study mode</Button></section> :
     <div className="recommendation-grid">{gaps.length ? gaps.map((gap, index) => <section className="panel recommendation-card" key={gap.name}><span className="recommendation-icon"><Icon name={index % 2 ? "cards" : "quiz"}/></span><Badge tone="peach">BASED ON LATEST QUIZ</Badge><h3>Review {gap.name.toLowerCase()}</h3><p>You missed the question connected to this concept. Try a short explanation, then answer a similar check.</p><div className="version-note"><Icon name="layers"/><span><strong>Suggested update · Version 2</strong><small>Version 1 remains available</small></span></div><Button onClick={start} icon="play" className="full-button">Start targeted practice</Button></section>) : <section className="panel recommendation-card"><span className="recommendation-icon"><Icon name="check"/></span><Badge>NO GAPS IN LATEST QUIZ</Badge><h3>Revisit later for spaced practice</h3><p>Your latest answers were correct. Calibrat8 will not invent a weakness; review again later to strengthen retention.</p><Button onClick={library} variant="secondary">Back to resources</Button></section>}</div>}
   </div>;
@@ -1615,6 +1615,16 @@ function ProfileSetup({ initial, editing, returning, startInNew = false, profile
       </div> : <>
         <Button onClick={() => setStep(1)} icon="arrow">Set up my learning space</Button>
       </>}
+      <button
+        type="button"
+        onClick={() => {
+          const sampleProfile = profiles[0]?.profile || defaultProfile;
+          onComplete(sampleProfile, profiles.length === 0);
+        }}
+        className="setup-skip focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sage)]"
+      >
+        Skip for now and explore
+      </button>
       {deletingTarget && (
         <div className="modal-backdrop" onMouseDown={() => !isDeleting && setDeletingTarget(null)}>
           <div className="delete-profile-modal" onMouseDown={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="delete-profile-title">
@@ -1637,7 +1647,7 @@ function ProfileSetup({ initial, editing, returning, startInNew = false, profile
       <div className="setup-heading"><Badge tone="blue">ABOUT YOU</Badge><h1>Let’s make this space yours.</h1><p>We only need enough detail to organize subjects and suggest useful next steps.</p></div>
       <div className="setup-form">
         <label className="setup-field"><span>What should Calibrat8 call you?</span><input value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} placeholder="Your name"/></label>
-        <label className="setup-field"><span>Age range</span><select value={profile.level} onChange={e => setProfile({ ...profile, level: e.target.value })}><option>Under 13</option><option>13–17</option><option>18–24</option><option>25–34</option><option>35–49</option><option>50 or older</option><option>Prefer not to say</option></select></label>
+        <label className="setup-field"><span>Age range</span><select aria-label="Choose your age range" className="cursor-pointer bg-[var(--paper)]! font-semibold text-[var(--ink)]! outline-none focus:border-[var(--sage)] focus:ring-2 focus:ring-[var(--sage-pale)]" value={profile.level} onChange={e => setProfile({ ...profile, level: e.target.value })}><option>Under 13</option><option>13–17</option><option>18–24</option><option>25–34</option><option>35–49</option><option>50 or older</option><option>Prefer not to say</option></select></label>
         <div className="setup-field"><span>Your interests <small>Choose up to four</small></span><div className="choice-grid">{[...PRESET_INTERESTS, ...profile.subjects.filter(subject => !PRESET_INTERESTS.includes(subject))].map(interest => <button key={interest} className={profile.subjects.includes(interest) ? "selected" : ""} onClick={() => toggleSubject(interest)}><span>{interest.slice(0, 2)}</span>{interest}{profile.subjects.includes(interest) && <Icon name="check" size={15}/>}</button>)}</div><input aria-label="Add a custom interest" placeholder="Add another interest and press Enter…" disabled={profile.subjects.length >= 4} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const interest = e.currentTarget.value.trim(); if (interest && !profile.subjects.includes(interest)) { toggleSubject(interest); e.currentTarget.value = ""; } } }}/></div>
       </div>
       {apiError && <p className="api-error" role="alert">{apiError}</p>}
@@ -1713,11 +1723,114 @@ function ProfileSetup({ initial, editing, returning, startInNew = false, profile
       <div className="completion-calibrat8 topic-welcome-calibrat8 flying-calibrat8"><Calibrat8 size="large" image="/calibrat8-flying-laptop.png"/></div>
       <div className="setup-heading"><Badge tone="peach">CALIBRAT8 IS READY TO HELP</Badge><h1>Hi! What would you like to learn?</h1><p>I’m happy you’re here. Type a topic, tell me by voice, show me a photo, or choose a file—we’ll take it one step at a time.</p></div>
       <section className="setup-form">
-        <div className="source-tabs" role="tablist" aria-label="Choose how to add a topic">
-          <button role="tab" aria-selected={topicMethod === "text"} className={topicMethod === "text" ? "active" : ""} onClick={() => setTopicMethod("text")}><Icon name="edit"/> Text</button>
-          <button role="tab" aria-selected={topicMethod === "voice"} className={topicMethod === "voice" ? "active" : ""} onClick={() => setTopicMethod("voice")}><Icon name="mic"/> Voice</button>
-          <button role="tab" aria-selected={topicMethod === "camera"} className={topicMethod === "camera" ? "active" : ""} onClick={() => setTopicMethod("camera")}><Icon name="image"/> Camera</button>
-          <button role="tab" aria-selected={topicMethod === "files"} className={topicMethod === "files" ? "active" : ""} onClick={() => setTopicMethod("files")}><Icon name="upload"/> File</button>
+        <div className="mb-6 grid grid-cols-2 gap-2 rounded-2xl border border-[var(--line)] bg-[var(--mist)] p-2 sm:grid-cols-4" role="tablist" aria-label="Choose how to add a topic">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={topicMethod === "text"}
+            aria-describedby="text-topic-method-description"
+            className={`group flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 ${
+              topicMethod === "text"
+                ? "border-[var(--sage)] bg-[var(--sage)] text-white! shadow-md"
+                : "border-transparent bg-[var(--paper)] text-[var(--muted)] hover:-translate-y-0.5 hover:border-[var(--sage)] hover:text-[var(--sage-dark)] hover:shadow-sm"
+            }`}
+            onClick={() => setTopicMethod("text")}
+          >
+            <span
+              className={`grid size-9 shrink-0 place-items-center rounded-lg ${
+                topicMethod === "text" ? "bg-white/15 text-white!" : "bg-[var(--sage-pale)] text-[var(--sage-dark)]"
+              }`}
+            >
+              <Icon name="book" />
+            </span>
+            <span className="grid gap-0.5">
+              <strong className="text-sm">Type it</strong>
+              <small
+                id="text-topic-method-description"
+                className={`text-xs ${topicMethod === "text" ? "text-white" : "text-[var(--muted)]"}`}
+              >
+                Write your topic
+              </small>
+            </span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={topicMethod === "voice"}
+            className={`group flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 ${
+              topicMethod === "voice"
+                ? "border-[var(--sage)] bg-[var(--sage)] text-white! shadow-md"
+                : "border-transparent bg-[var(--paper)] text-[var(--muted)] hover:-translate-y-0.5 hover:border-[var(--sage)] hover:text-[var(--sage-dark)] hover:shadow-sm"
+            }`}
+            onClick={() => setTopicMethod("voice")}
+          >
+            <span
+              className={`grid size-9 shrink-0 place-items-center rounded-lg ${
+                topicMethod === "voice" ? "bg-white/15 text-white!" : "bg-[var(--peach-pale)] text-[var(--peach)]"
+              }`}
+            >
+              <Icon name="mic" />
+            </span>
+            <span className="grid gap-0.5">
+              <strong className="text-sm">Say it</strong>
+              <small className={`text-xs ${topicMethod === "voice" ? "text-white" : "text-[var(--muted)]"}`}>
+                Use your voice
+              </small>
+            </span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={topicMethod === "camera"}
+            className={`group flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 ${
+              topicMethod === "camera"
+                ? "border-[var(--sage)] bg-[var(--sage)] text-white! shadow-md"
+                : "border-transparent bg-[var(--paper)] text-[var(--muted)] hover:-translate-y-0.5 hover:border-[var(--sage)] hover:text-[var(--sage-dark)] hover:shadow-sm"
+            }`}
+            onClick={() => setTopicMethod("camera")}
+          >
+            <span
+              className={`grid size-9 shrink-0 place-items-center rounded-lg ${
+                topicMethod === "camera" ? "bg-white/15 text-white!" : "bg-[var(--blue-pale)] text-[var(--blue)]"
+              }`}
+            >
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 5 10.5 3h3L15 5h3a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3Z" />
+                <circle cx="12" cy="12.5" r="4" />
+              </svg>
+            </span>
+            <span className="grid gap-0.5">
+              <strong className="text-sm">Snap it</strong>
+              <small className={`text-xs ${topicMethod === "camera" ? "text-white" : "text-[var(--muted)]"}`}>
+                Take a photo
+              </small>
+            </span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={topicMethod === "files"}
+            className={`group flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 ${
+              topicMethod === "files"
+                ? "border-[var(--sage)] bg-[var(--sage)] text-white! shadow-md"
+                : "border-transparent bg-[var(--paper)] text-[var(--muted)] hover:-translate-y-0.5 hover:border-[var(--sage)] hover:text-[var(--sage-dark)] hover:shadow-sm"
+            }`}
+            onClick={() => setTopicMethod("files")}
+          >
+            <span
+              className={`grid size-9 shrink-0 place-items-center rounded-lg ${
+                topicMethod === "files" ? "bg-white/15 text-white!" : "bg-[var(--sage-pale)] text-[var(--sage-dark)]"
+              }`}
+            >
+              <Icon name="upload" />
+            </span>
+            <span className="grid gap-0.5">
+              <strong className="text-sm">Add a file</strong>
+              <small className={`text-xs ${topicMethod === "files" ? "text-white" : "text-[var(--muted)]"}`}>
+                Upload material
+              </small>
+            </span>
+          </button>
         </div>
         {topicMethod === "text" && <label className="setup-field"><span>Topic you want to learn</span><input value={profile.learningTopic} onChange={e => setProfile({ ...profile, learningTopic: e.target.value })} placeholder="For example: How solar panels work"/></label>}
         {topicMethod === "voice" && <div className={`drop-zone compact-drop-zone voice-recorder ${isRecording ? "is-recording" : ""}`}>
