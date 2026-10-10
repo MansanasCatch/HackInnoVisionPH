@@ -294,6 +294,30 @@ export const api = {
     }
   },
 
+  async createLearningResource(payload: {
+    onboarding_id: number;
+    title: string;
+    subject?: string;
+    source_label?: string;
+  }): Promise<LearningResourceRead> {
+    const res = await request(`${BASE_URL}/learning-resources`, jsonInit("POST", payload));
+    return handleResponse<LearningResourceRead>(res);
+  },
+
+  async createResourceVersion(
+    resourceId: number,
+    payload: {
+      title?: string;
+      summary?: string;
+      content: any;
+      resource_types?: string[];
+      topics?: string[];
+    }
+  ): Promise<LearningResourceVersionRead> {
+    const res = await request(`${BASE_URL}/learning-resources/${resourceId}/versions`, jsonInit("POST", payload));
+    return handleResponse<LearningResourceVersionRead>(res);
+  },
+
   async listLearningResources(onboardingId: number): Promise<LearningResourceRead[]> {
     const res = await fetch(`${BASE_URL}/learning-resources?onboarding_id=${onboardingId}`);
     return handleResponse<LearningResourceRead[]>(res);

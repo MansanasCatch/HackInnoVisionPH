@@ -13,6 +13,9 @@ export type MaterialSet = {
   warnings: string[];
   fileNames: string[];
   materials: StudyMaterialsResponse;
+  resourceId?: number;
+  versionId?: number;
+  onboardingId?: number;
 };
 
 export type QuizItem = {
@@ -28,7 +31,11 @@ export type CardItem = { front: string; back: string; concept: string };
 /** Keep prompts inside what small local models can digest. */
 export const MAX_CONTEXT_CHARS = 12000;
 
-export function toMaterialSet(res: AIGenerateResponse, topic: string): MaterialSet | null {
+export function toMaterialSet(
+  res: AIGenerateResponse,
+  topic: string,
+  extra?: { resourceId?: number; versionId?: number; onboardingId?: number }
+): MaterialSet | null {
   if (!res.study_materials) return null;
   return {
     topic: res.study_materials.topic || topic,
@@ -38,6 +45,29 @@ export function toMaterialSet(res: AIGenerateResponse, topic: string): MaterialS
     warnings: res.warnings || [],
     fileNames: (res.ingested_files || []).map((f) => f.filename),
     materials: res.study_materials,
+    resourceId: extra?.resourceId,
+    versionId: extra?.versionId,
+    onboardingId: extra?.onboardingId,
+  };
+}
+
+export function fromVersionToMaterialSet(
+  version: { id: number; learning_resource_id: number; title: string; content: any },
+  extra?: { sourceLabel?: string; onboardingId?: number }
+): MaterialSet | null {
+  if (!version.content || typeof version.content !== "object") return null;
+  const content = version.content as StudyMaterialsResponse;
+  return {
+    topic: content.topic || version.title,
+    model: "Saved resource",
+    seconds: 0,
+    online: true,
+    warnings: [],
+    fileNames: extra?.sourceLabel ? [extra.sourceLabel] : [],
+    materials: content,
+    resourceId: version.learning_resource_id,
+    versionId: version.id,
+    onboardingId: extra?.onboardingId,
   };
 }
 

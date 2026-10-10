@@ -2,13 +2,14 @@ import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { api, ApiError, describeApiError } from "./api/client";
 import { mapAgeRangeToNumber, mapAgeToRange } from "./api/mappers";
 import StudyMode from "./StudyMode";
-import { asQuestion, buildTextContext, MAX_CONTEXT_CHARS, toCards, toMaterialSet, toQuizItems, tutorReply } from "./materials";
+import { asQuestion, buildTextContext, fromVersionToMaterialSet, MAX_CONTEXT_CHARS, toCards, toMaterialSet, toQuizItems, tutorReply } from "./materials";
 import type { CardItem, MaterialSet, QuizItem } from "./materials";
 import type {
   ActiveModelResponse,
   DeviceSpecsDetect,
   DeviceSpecsRead,
   KnowledgeMapResponse,
+  LearningResourceRead,
   ModelOption,
   ModelSuggestionsResponse,
   OllamaModelsResponse,
@@ -785,8 +786,46 @@ function Generation({
         text_context: textContext || undefined,
         files: uploads,
       });
-      const material = toMaterialSet(res, topic);
+      let material = toMaterialSet(res, topic);
       if (!material) throw new Error("The model returned no study materials. Try again with more detailed notes.");
+
+      if (profile.onboardingId != null) {
+        try {
+          const sourceLabel = preparedMaterial.files.map(f => f.name).join(", ") || "Typed notes";
+          const resourceRecord = await api.createLearningResource({
+            onboarding_id: profile.onboardingId,
+            title: (topic || material.materials.topic).slice(0, 160),
+            subject: topic.slice(0, 100),
+            source_label: sourceLabel.slice(0, 255),
+          });
+
+          const topicsList: string[] = [];
+          for (const name of [
+            ...(material.materials.key_notes || []).map(n => n.topic),
+            ...(material.materials.source_coverage?.covered_topics || []),
+          ]) {
+            if (name && !topicsList.includes(name)) topicsList.push(name);
+          }
+
+          const versionRecord = await api.createResourceVersion(resourceRecord.id, {
+            title: (topic || material.materials.topic).slice(0, 160),
+            summary: material.materials.summary?.content || "",
+            content: material.materials,
+            resource_types: selected,
+            topics: topicsList,
+          });
+
+          material = {
+            ...material,
+            resourceId: resourceRecord.id,
+            versionId: versionRecord.id,
+            onboardingId: profile.onboardingId,
+          };
+        } catch (persistErr) {
+          console.warn("Could not persist learning resource to backend database:", persistErr);
+        }
+      }
+
       setResult(material);
       onResourceGenerated(material);
     } catch (err) {
@@ -839,12 +878,49 @@ function ResourceLibrary({
   go,
   create,
   material,
+  profile,
+  onSelectSavedResource,
 }: {
   go: (page: Page) => void;
   create: () => void;
   material: MaterialSet | null;
+  profile?: ProfileData;
+  onSelectSavedResource?: (m: MaterialSet) => void;
 }) {
   const [filter, setFilter] = useState<"all" | "notes" | "cards" | "quiz">("all");
+  const [savedResources, setSavedResources] = useState<LearningResourceRead[]>([]);
+  const [loadingResource, setLoadingResource] = useState(false);
+
+  useEffect(() => {
+    if (profile?.onboardingId != null) {
+      api.listLearningResources(profile.onboardingId)
+        .then(res => setSavedResources(res))
+        .catch(() => setSavedResources([]));
+    }
+  }, [profile?.onboardingId, material?.resourceId]);
+
+  const loadSaved = async (resource: LearningResourceRead) => {
+    if (loadingResource) return;
+    setLoadingResource(true);
+    try {
+      const versions = await api.listVersions(resource.id);
+      if (versions.length > 0) {
+        const currentVersion = versions.find(v => v.is_current) || versions[0];
+        const loaded = fromVersionToMaterialSet(currentVersion, {
+          sourceLabel: resource.source_label,
+          onboardingId: profile?.onboardingId || undefined,
+        });
+        if (loaded && onSelectSavedResource) {
+          onSelectSavedResource(loaded);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to load saved resource version:", err);
+    } finally {
+      setLoadingResource(false);
+    }
+  };
+
   const sm = material?.materials;
   const keyNotesCount = material ? (sm?.key_notes.length || sm?.reviewer.sections.length || 0) : 4;
   const cardsCount = material ? toCards(sm).length : demoCards.length;
@@ -861,13 +937,43 @@ function ResourceLibrary({
     : "Biology lesson notes";
   return <div className="page library-page">
     <section className="workflow-hero"><div><Badge tone="blue">LEARNING RESOURCES</Badge><h2>Everything you need, in one learning set.</h2><p>Open saved material, continue studying, or create a new set from your own notes and files.</p></div><Button onClick={create} icon="plus">Create learning set</Button></section>
+    
+    {savedResources.length > 0 && (
+      <section className="panel mb-4 p-4 border border-[var(--line)] rounded-2xl bg-[var(--mist)]">
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <p className="eyebrow m-0">SAVED STUDY SETS ({savedResources.length})</p>
+          {loadingResource && <span className="text-xs text-[var(--muted)]">Loading study set…</span>}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {savedResources.map(res => {
+            const isSelected = material?.resourceId === res.id;
+            return (
+              <button
+                key={res.id}
+                type="button"
+                onClick={() => loadSaved(res)}
+                disabled={loadingResource}
+                className={`px-3 py-1.5 rounded-xl text-sm font-medium border transition-all ${
+                  isSelected
+                    ? "bg-[var(--sage)] text-white border-[var(--sage)] shadow-sm"
+                    : "bg-[var(--paper)] text-[var(--ink)] border-[var(--line)] hover:border-[var(--sage)]"
+                }`}
+              >
+                {res.title}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    )}
+
     {material && <MaterialNotice material={material}/>}
     <div className="library-tabs" role="tablist" aria-label="Filter learning resources">{[["all", "All resources"], ["notes", "Notes"], ["cards", "Flashcards"], ["quiz", "Quizzes"]].map(([id, label]) => <button role="tab" aria-selected={filter === id} className={filter === id ? "active" : ""} onClick={() => setFilter(id as typeof filter)} key={id}>{label}</button>)}</div>
     <section className="panel learning-set">
-      <div className="learning-set-head"><div className="set-art"><Icon name="book" size={28}/></div><div><span><Badge>{material ? "Generated" : "Biology"}</Badge><Badge tone="neutral">Available offline</Badge></span><h3>{topicTitle}</h3><p>Source: {source}</p></div><Button onClick={() => go("focus")} icon="play">Start studying</Button></div>
+      <div className="learning-set-head"><div className="set-art"><Icon name="book" size={28}/></div><div><span><Badge>{material ? (material.resourceId ? "Saved in Database" : "Generated") : "Biology"}</Badge><Badge tone="neutral">Available offline</Badge></span><h3>{topicTitle}</h3><p>Source: {source}</p></div><Button onClick={() => go("focus")} icon="play">Start studying</Button></div>
       <div className="set-progress"><span><strong>Learning progress</strong><small>No completed quiz yet</small></span><div><i/></div><button onClick={() => go("knowledge")}>View knowledge map <Icon name="arrow" size={15}/></button></div>
       <div className="resource-action-grid">{actions.filter(item => filter === "all" || filter === item.id).map(item => <button key={item.id} onClick={() => go(item.page)}><span><Icon name={item.icon}/></span><span><strong>{item.label}</strong><small>{item.meta} · {material ? "from your material" : "demo source"}</small></span><Icon name="chevron"/></button>)}</div>
-      <div className="version-row"><span><Icon name="layers"/><strong>Version 1</strong><small>{material ? "Generated by your local AI model" : "Original sample set · no adaptive updates yet"}</small></span><button onClick={() => go("recommendations")}>Check recommendations</button></div>
+      <div className="version-row"><span><Icon name="layers"/><strong>Version {material?.versionId ? `${material.versionId}` : "1"}</strong><small>{material ? "Saved on your local device & backend database" : "Original sample set · no adaptive updates yet"}</small></span><button onClick={() => go("recommendations")}>Check recommendations</button></div>
     </section>
     <section className="library-empty panel"><div><Icon name="plus"/></div><span><strong>Create another learning set</strong><small>Import notes, PDFs, text files, or paste text manually.</small></span><Button variant="secondary" onClick={create} icon="upload">Add material</Button></section>
   </div>;
@@ -2317,7 +2423,7 @@ export default function App() {
     persistProfiles(profiles, profileId);
     void syncProfileFromServer(profileId, selected.profile.onboardingId);
   };
-  const saveAttempt = (attempt: Attempt) => {
+  const saveAttempt = async (attempt: Attempt) => {
     const next = [...attempts, attempt];
     setAttempts(next);
     setLatestAttempt(attempt);
@@ -2325,6 +2431,40 @@ export default function App() {
     setProfiles(nextProfiles);
     persistProfiles(nextProfiles, activeProfileId);
     setPage("completion");
+
+    // Sync session to backend SQLite for live knowledge-map and reports
+    if (profile.onboardingId != null && generatedMaterial?.versionId != null) {
+      try {
+        const session = await api.startStudySession({
+          onboarding_id: profile.onboardingId,
+          resource_version_id: generatedMaterial.versionId,
+          mode: attempt.source === "quiz" ? "quiz" : "practice",
+          source: "practice_quiz",
+        });
+
+        for (let i = 0; i < attempt.concepts.length; i++) {
+          const c = attempt.concepts[i];
+          await api.submitStudyAnswer(session.id, {
+            question_id: `q-${i + 1}`,
+            concept_id: c.name,
+            concept_name: c.name,
+            student_answer: c.correct ? "correct" : "incorrect",
+            correct_answer: "correct",
+            is_correct: c.correct,
+            time_taken_seconds: 5,
+          });
+        }
+
+        await api.completeStudySession(session.id, {
+          score: attempt.score,
+          total_items: attempt.total,
+          correct_items: attempt.score,
+          time_spent_seconds: attempt.concepts.length * 5,
+        });
+      } catch (sessionErr) {
+        console.warn("Could not sync study session to backend database:", sessionErr);
+      }
+    }
   };
   const completeStudy = (score: number, total: number, concepts: { name: string; correct: boolean }[]) => saveAttempt({
     score,
@@ -2442,7 +2582,7 @@ export default function App() {
       {page === "lessons" && <Lessons online={online} addMaterial={() => setPage("ingest")}/>}
       {page === "ingest" && <ContentIngestion online={online} done={next => setPage(next || "library")} onPrepareMaterial={setPreparedMaterial}/>}
       {page === "generation" && <Generation online={online} profile={profile} preparedMaterial={preparedMaterial} back={() => setPage("ingest")} finish={() => setPage("library")} onResourceGenerated={setGeneratedMaterial}/>}
-      {page === "library" && <ResourceLibrary go={setPage} create={() => setPage("ingest")} material={generatedMaterial}/>}
+      {page === "library" && <ResourceLibrary go={setPage} create={() => setPage("ingest")} material={generatedMaterial} profile={profile} onSelectSavedResource={setGeneratedMaterial}/>}
       {page === "notes" && <NotesViewer back={() => setPage("library")} start={() => setPage("focus")} material={generatedMaterial}/>}
       {page === "flashcards" && <FlashcardsViewer back={() => setPage("library")} takeQuiz={() => setPage("quiz")} material={generatedMaterial}/>}
       {page === "quiz" && <QuizViewer back={() => setPage("library")} submit={saveAttempt} material={generatedMaterial}/>}
