@@ -34,19 +34,22 @@ Today’s AI study tools depend on cloud servers and a constant internet connect
 - 🔐 **Private**: Lessons, review materials, and scores never leave the device.
 - 💰 **Affordable**: No per-query cloud cost, so it can be free or very low cost for students, reviewees, and schools.
 - 🌐 **Inclusive**: Built for rural and low-connectivity communities.
-- 💻 **Device-aware**: Automatically detects RAM, GPU, VRAM, CPU, and storage, then recommends the right local model, with a non-AI fallback for weak devices.
+- 💻 **Cross-Platform Device-Aware**: Automatically detects RAM, GPU, VRAM, CPU, and storage across **both Windows and macOS** (including Apple Silicon M-series unified memory & Metal acceleration), then recommends the right local model with a non-AI fallback for lightweight devices.
 
 ---
 
 ## ✨ Key Features
 
-- ⚙️ **Setup that fits the device**: Onboarding profile plus hardware detection and local model selection with automatic download through Ollama.
-- 🤖 **Offline AI generation**: Notes summaries, key notes, flashcards, and quizzes/exams/reviewers generated on-device.
-- 🗃️ **Central Learning Resources hub**: All materials stored with version history.
-- 📈 **Adaptive difficulty**: Questions calibrate to previous scores through the Knowledge Map.
-- ⏱️ **Study Mode**: Load priorities, recalculate, then start a session in Scene, where users answer quizzes, mock exams, and flashcards.
-- 🔍 **Mistake analysis**: Identifies weak topics and misconceptions from wrong answers.
-- 📊 **Learning comparison report**: Shows progress across versions, useful for tracking exam readiness.
+- ⚙️ **Cross-Platform Hardware Detection**: Seamless auto-detection on Windows (WMI/DirectX) and macOS (`sysctl`/`system_profiler`), detecting Apple Silicon unified memory or dedicated NVIDIA/AMD VRAM.
+- 🧠 **Hardware-Informed Model Recommendations**: Tiered model suggestions (`llama3.2:1b`, `llama3.2:3b`, `phi3.5:mini`, `qwen2.5:7b`) with memory headroom calculations and reasons.
+- 👥 **Multi-Profile Management & Cascading Cleanup**: Switch accounts instantly from the sidebar widget, sync profiles to SQLite database, and delete profiles with cascading deletion of child device specs, learning resources, and study attempts.
+- 🤖 **Offline AI Generation**: Notes summaries, key notes, flashcards, and quizzes/exams/reviewers generated on-device via Ollama.
+- 🗃️ **Central Learning Resources Hub**: All materials stored with version history (3-version retention window + archived analytics).
+- 📈 **Adaptive Difficulty**: Questions calibrate to previous scores through the Knowledge Map.
+- ⏱️ **Interactive Focus Mode**: 3-activity step progress indicator (`CONCEPT` → `FLASHCARD` → `QUICK CHECK`), interactive 3D flashcard flip, equation hover highlights, and real-time quiz feedback callouts.
+- 📥 **4-Column Multi-Modal Ingestion**: Capture materials via typing (`Type it`), microphone voice recording (`Say it`), camera capture (`Snap it`), or document file upload (`Add a file`).
+- 🔍 **Mistake Analysis**: Identifies weak topics and misconceptions from wrong answers.
+- 📊 **Learning Comparison Report**: Shows progress across versions, useful for tracking exam readiness.
 
 ---
 
@@ -61,24 +64,18 @@ Today’s AI study tools depend on cloud servers and a constant internet connect
 
 ---
 
-## 🌟 Impact
-
-Calibrat8 gives every learner, from a high school student to a civil service examinee, a personal tutor available 24/7, even when the internet or every cloud AI service is down. It does not just generate answers: it builds a picture of what each person knows and keeps adjusting practice to help them pass.
-
----
-
 ## 💡 Project Flow & System Architecture
 
 ### Flow
 
 #### A. Setup
-- **Onboarding / Account Setup**: Create a local profile (username, list of interests, age, study level, subjects, exam dates, daily study time).
-- **Device Specs Setup**: Detect RAM, GPU, and storage, then pick the right local AI model (or a non-AI fallback).
+- **Onboarding / Account Setup**: Create a local profile (username, list of interests, age, study level, subjects, exam dates, daily study time). Profiles support switching, editing, and database-backed deletion.
+- **Device Specs Setup**: Auto-detect RAM, GPU, VRAM, and storage (Windows & macOS), then pick the right local AI model (or non-AI fallback). Ollama auto-pulls selected models in the background.
 
 #### B. Create
 - **Ingest**: Lessons, notes, and files (PDF, Word, Excel, Images, CSV, Text) are extracted, chunked, and tagged to topics.
 - **Process Flow**: Job queue, prompt templates, output validation, and progress tracking.
-- **Local AI**: Runs on-device (in-browser or local server via Ollama) and generates study material.
+- **Local AI**: Runs on-device (local server via Ollama) and generates study material.
 - **Generate**: Produces Notes Summary / Key Notes, Flashcards, and Quizzes / Exam / Reviewer.
 - **Learning Resources**: The central hub that stores everything with version history.
 - **Report: Learning Comparison**: Compares progress across versions.
@@ -88,7 +85,7 @@ Calibrat8 gives every learner, from a high school student to a civil service exa
 - **Load Learning Resources**: Builds the session queue by priority.
 - **Recalculating**: Updates priorities using the latest 3 versions.
 - **Start**: Begins the session.
-- **Scene**: Where the student answers quizzes, exams, and flashcards.
+- **Scene / Focus**: Where the student answers quizzes, exams, and flashcards with instant feedback.
 - **Completed**: Shows score and summary.
 - **Update Knowledge Map**: Updates mastery, analyzes mistakes, and writes back to Learning Resources.
 
@@ -96,9 +93,9 @@ Calibrat8 gives every learner, from a high school student to a civil service exa
 The Loop:
 Ingest ──► Local AI ──► Generate ──► Learning Resources
                                            │
-Study Mode ──► Load ──► Recalculating ──► Start ──► Scene ──► Completed
-                                                                 │
-                                       Update Knowledge Map ─────┘
+Study Mode ──► Load ──► Recalculating ──► Start ──► Focus Scene ──► Completed
+                                                                       │
+                                             Update Knowledge Map ─────┘
 ```
 
 #### 📊 Scene Records Per Answer
@@ -131,10 +128,11 @@ Study Mode ──► Load ──► Recalculating ──► Start ──► Scen
 | --- | --- |
 | **Backend API** | **FastAPI**, **Python 3.12+**, Uvicorn (ASGI), Pydantic v2 |
 | **Database & ORM** | **SQLite 3**, **SQLAlchemy 2.0** ORM, **Alembic** migrations |
-| **Local AI Engine** | **Ollama** (Local models: `llama3.2:1b`, `llama3.2:3b`, `phi3:mini`, `gemma2:2b`), Psutil |
-| **Frontend UI** | **React 19**, **TypeScript**, **Vite 5**, **TailwindCSS v4**, Single-Page Application (SPA) |
+| **Local AI Engine** | **Ollama** (`llama3.2:1b`, `llama3.2:3b`, `phi3.5:mini`, `qwen2.5:7b`), Psutil |
+| **Hardware Detection** | Cross-platform engine (Windows WMI/DirectX + macOS sysctl/system_profiler Metal) |
+| **Frontend UI** | **React 19**, **TypeScript 5.7**, **Vite 5**, **TailwindCSS v4**, Single-Page Application (SPA) |
 | **Document Extraction** | PyPDF, python-docx, openpyxl, Pillow, CSV, Plain Text |
-| **Testing & Quality** | Pytest, Pytest-Asyncio, Pytest-Cov, Ruff |
+| **Testing & Quality** | Pytest, Pytest-Asyncio, Pytest-Cov, Ruff, Vitest |
 
 ---
 
@@ -198,7 +196,7 @@ python run.py
 
 Open **http://127.0.0.1:8000** in your browser.
 
-> 💡 If PowerShell blocks script execution on Windows, run once:
+> 💡 If PowerShell blocks script execution on Windows, run once:  
 > `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
 
 ---
@@ -238,53 +236,66 @@ python run.py
 
 ```text
 InnoVisionPH/
-├── app/                          # Backend application (Clean Architecture & FastAPI)
-│   ├── main.py                   # FastAPI app factory, middleware, routes & React SPA mounts
-│   ├── api/                      # 🌐 Presentation layer (HTTP controllers)
-│   │   ├── deps.py               #    Dependency injection wiring
+├── app/                              # Backend application (Clean Architecture & FastAPI)
+│   ├── main.py                       # FastAPI app factory, middleware, routes & React SPA mounts
+│   ├── api/                          # 🌐 Presentation layer (HTTP controllers)
+│   │   ├── deps.py                   #    Dependency injection wiring
 │   │   └── v1/
-│   │       ├── router.py         #    Aggregated API v1 router
-│   │       └── endpoints/        #    health.py, onboarding.py, device.py, ai.py
-│   ├── services/                 # 🧠 Business logic & domain use cases
-│   │   ├── onboarding_service.py #    User onboarding use cases
-│   │   ├── device_service.py     #    Device specs & hardware recommendation engine
-│   │   ├── local_ai_service.py   #    Local AI model inference & context grounding
-│   │   ├── file_parser.py        #    Multi-format document extractor (PDF, Word, Excel, Images, CSV, Text)
-│   │   ├── ollama_service.py     #    Ollama daemon auto-start & background pull percentage tracker
-│   │   └── health_service.py     #    Health check logic
-│   ├── repositories/             # 🗃️ Data access (Abstract ports + SQLAlchemy adapters)
-│   │   ├── onboarding_repository.py
-│   │   └── device_repository.py
-│   ├── models/                   # 🧱 SQLAlchemy 2.0 ORM models (Database tables)
-│   │   ├── onboarding.py         #    OnboardingProfile model
-│   │   └── device.py             #    DeviceSpecs model
-│   ├── schemas/                  # 📦 Pydantic schemas (Request / response contracts)
+│   │       ├── router.py             #    Aggregated API v1 router
+│   │       └── endpoints/            #    health, onboarding, device, ai, learning_resources, study_sessions, knowledge_map
+│   ├── services/                     # 🧠 Business logic & domain use cases
+│   │   ├── onboarding_service.py     #    User onboarding & cascade deletion use cases
+│   │   ├── device_service.py         #    Device specs coordination & model selection
+│   │   ├── device_detection.py       #    Cross-platform hardware detector (Windows & macOS)
+│   │   ├── model_recommendation.py   #    Hardware-aware model recommender
+│   │   ├── local_ai_service.py       #    Local AI model inference & context grounding
+│   │   ├── file_parser.py            #    Multi-format document extractor (PDF, Word, Excel, Images, CSV, Text)
+│   │   ├── ollama_service.py         #    Ollama daemon auto-start & background pull percentage tracker
+│   │   └── health_service.py         #    Health check logic
+│   ├── repositories/                 # 🗃️ Data access (Abstract ports + SQLAlchemy adapters)
+│   │   ├── onboarding_repository.py  #    Onboarding DB access with cascading deletion
+│   │   ├── device_repository.py      #    Device specs DB access
+│   │   ├── learning_resource_repository.py
+│   │   └── study_session_repository.py
+│   ├── models/                       # 🧱 SQLAlchemy 2.0 ORM models (Database tables)
+│   │   ├── onboarding.py             #    OnboardingProfile model
+│   │   ├── device.py                 #    DeviceSpecs model
+│   │   ├── learning_resource.py      #    LearningResource & versions
+│   │   └── study_session.py          #    StudySession & answer logs
+│   ├── schemas/                      # 📦 Pydantic schemas (Request / response contracts)
 │   │   ├── onboarding.py
 │   │   ├── device.py
 │   │   ├── ai.py
+│   │   ├── learning_resource.py
+│   │   ├── study_session.py
 │   │   └── health.py
-│   ├── db/                       # ⚙️ Database engine, session maker & SQLite DB (`innovision.db`)
-│   └── core/                     # 🔧 Configuration (.env), logging & custom exceptions
-├── frontend/                     # ⚛️ React 19 + TypeScript + TailwindCSS v4 SPA
-│   ├── src/                      #    App components & styles (App.tsx, index.css, main.tsx)
-│   ├── public/                   #    Static assets (favicon.svg, character sheets)
-│   ├── dist/                     #    Production bundle output (compiled via `npm run build`)
-│   ├── index.html                #    Single Page Application entry point
-│   ├── package.json              #    Frontend package definitions & scripts
-│   ├── tsconfig.json             #    TypeScript configuration
-│   └── vite.config.ts            #    Vite 5 build configuration
-├── migrations/                   # Alembic database migrations
-│   ├── env.py                    # Migration environment connected to app metadata
-│   └── versions/                 # DB schema migration scripts
+│   ├── db/                           # ⚙️ Database engine, session maker & SQLite DB (`innovision.db`)
+│   └── core/                         # 🔧 Configuration (.env), logging & custom exceptions
+├── frontend/                         # ⚛️ React 19 + TypeScript + TailwindCSS v4 SPA
+│   ├── README.md                     #    Dedicated frontend architecture & UI guide
+│   ├── src/
+│   │   ├── api/                      #    Typed API client, mappers, and TypeScript schemas
+│   │   ├── App.tsx                   #    App shell, multi-profile state, study scenes, navigation
+│   │   ├── index.css                 #    Design tokens, ambient lighting, keyframe animations
+│   │   └── main.tsx                  #    React 19 entrypoint
+│   ├── public/                       #    Static assets (Calibrat8 illustrations, icons)
+│   ├── dist/                         #    Production bundle output (compiled via `npm run build`)
+│   ├── index.html                    #    Single Page Application entry point
+│   ├── package.json                  #    Dependencies & scripts
+│   ├── tsconfig.json                 #    TypeScript configuration
+│   └── vite.config.ts                #    Vite build & dev proxy configuration
+├── migrations/                       # Alembic database migrations
+│   ├── env.py                        # Migration environment connected to app metadata
+│   └── versions/                     # DB schema migration scripts
 ├── tests/
-│   ├── conftest.py               # Shared fixtures (in-memory SQLite, TestClient)
-│   ├── unit/                     # ✅ Unit tests for services & parsers
-│   └── integration/              # 🔗 API & repository integration tests
-├── alembic.ini                   # Alembic configuration
-├── pyproject.toml                # Pytest, coverage & Ruff linting configuration
-├── requirements.txt              # Pinned Python dependencies
-├── run.py                        # Server launcher script
-└── README.md                     # Documentation
+│   ├── conftest.py                   # Shared fixtures (in-memory SQLite, TestClient)
+│   ├── unit/                         # ✅ Unit tests for services & parsers
+│   └── integration/                  # 🔗 API & repository integration tests
+├── alembic.ini                       # Alembic configuration
+├── pyproject.toml                    # Pytest, coverage & Ruff linting configuration
+├── requirements.txt                  # Pinned Python dependencies
+├── run.py                            # Server launcher script
+└── README.md                         # Project documentation
 ```
 
 ---
@@ -293,8 +304,8 @@ InnoVisionPH/
 
 ```text
  Browser / Client  ──fetch──►  API (routers)  ──►  Services  ──►  Repositories  ──►  Database / Ollama
-                                validate DTOs       business        data access       SQLAlchemy
-                                (Pydantic)          rules           (abstract port)   + Local AI Engine
+ (React 19 SPA)                validate DTOs       business        data access       SQLAlchemy SQLite
+                               (Pydantic v2)       rules           (abstract port)   + Local Ollama Engine
 ```
 
 ---
@@ -303,20 +314,21 @@ InnoVisionPH/
 
 Base path: `/api/v1`
 
-### 👤 Onboarding
+### 👤 Onboarding & Profile Management
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/health` | API liveness and database connectivity status |
-| `POST` | `/onboarding` | Save onboarding account setup (Username, List of interests, Age, etc.) |
+| `POST` | `/onboarding` | Save onboarding account setup (username, interests, age) |
 | `GET` | `/onboarding` | List onboarding profiles (with optional pagination limit & offset) |
 | `GET` | `/onboarding/{id}` | Get onboarding profile by ID |
 | `GET` | `/onboarding/user/{username}` | Get onboarding profile by Username |
-| `PUT` | `/onboarding/{id}` | Update onboarding profile |
+| `PUT` | `/onboarding/{id}` | Update onboarding profile preferences |
+| `DELETE` | `/onboarding/{id}` | Permanently delete profile and cascade delete all child device specs, resources, and study sessions |
 
 ### 💻 Device Specs Setup & Local AI Models
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/device/detect` | Auto-detect host machine hardware specs (RAM, GPU, VRAM, CPU, storage, OS) |
+| `POST` | `/device/detect` | Cross-platform auto-detect of host machine hardware (Windows & macOS RAM, GPU/Metal, VRAM, CPU, storage, OS) |
 | `GET` | `/device/suggestions` | Get local AI model options with specific hardware applicability reasons |
 | `POST` | `/device` | Save hardware specs setup linked to an onboarding account (`onboarding_id`) |
 | `GET` | `/device/account/{onboarding_id}` | Fetch device specs & selected model for an account |
@@ -349,10 +361,8 @@ Base path: `/api/v1`
 | `POST` | `/study-sessions` | Start an attempt against an exact version |
 | `GET` | `/study-sessions` | List completed study sessions for an account |
 | `GET` | `/study-sessions/{id}` | Get study session status, score, and summary |
-| `POST` | `/study-sessions/{session_id}/answers` | Record an answer and concept evidence (tracks correct, hints, confidence) |
+| `POST` | `/study-sessions/{session_id}/answers` | Record an answer and concept evidence (tracks correct, hints, confidence, time) |
 | `POST` | `/study-sessions/{session_id}/complete` | Score the attempt and advance only the current version |
-
-Completing the current version creates a successor with an `adaptive_review` section based on recorded answers. Completing an older version only updates its progress. The completion response includes `new_version_id` and `archived_version_number` when applicable. Repeating completion returns the original result without adding another attempt or version. Before removing an old version, the API preserves its compact score and concept totals for analytics; its full content and answer history are deleted.
 
 ### 🗺️ Knowledge Map & Mastery
 | Method | Path | Description |
@@ -382,21 +392,25 @@ alembic current
 ---
 
 ## 🧪 Testing & Code Quality
- 
+
+### Backend Tests
 ```bash
-# Backend test suite (55 tests)
-.venv\Scripts\pytest
+# Run unit & integration test suites
+.venv\Scripts\python -m pytest tests/unit/test_device_service.py tests/unit/test_onboarding_service.py tests/integration/test_device_api.py tests/integration/test_onboarding_api.py
 
-# Backend code style & lint checks
+# Backend code formatting & lint checks
 .venv\Scripts\ruff check .
+```
 
-# Frontend type checking
-cd frontend && npm run typecheck
+### Frontend Tests & Type Checking
+```bash
+# Navigate to frontend
+cd frontend
 
-# Frontend mapper unit tests (Vitest)
-npm run test
+# TypeScript typecheck
+npx tsc --noEmit
 
-# Frontend production bundle build
+# Production bundle build
 npm run build
 ```
 
