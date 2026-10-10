@@ -173,3 +173,16 @@ export function mapAgeRangeToNumber(ageRange: string): number {
       return 20;
   }
 }
+
+/**
+ * Maps a numeric age from the backend back to the closest ProfileSetup age range label.
+ */
+export function mapAgeToRange(age: number | null | undefined): string {
+  if (age == null || !Number.isFinite(age)) return "Prefer not to say";
+  if (age < 13) return "Under 13";
+  if (age <= 17) return "13–17";
+  if (age <= 24) return "18–24";
+  if (age <= 34) return "25–34";
+  if (age <= 49) return "35–49";
+  return "50 or older";
+}

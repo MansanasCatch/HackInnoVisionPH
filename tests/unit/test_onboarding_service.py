@@ -45,6 +45,9 @@ class FakeOnboardingRepository(AbstractOnboardingRepository):
         self._items[profile.id] = profile
         return profile
 
+    def delete(self, profile: OnboardingProfile) -> None:
+        self._items.pop(profile.id, None)
+
 
 @pytest.fixture
 def service() -> OnboardingService:
@@ -89,3 +92,18 @@ def test_update_onboarding_profile(service: OnboardingService) -> None:
     )
     assert updated.interests == ["Biology", "Chemistry"]
     assert updated.age == 21
+
+
+def test_delete_onboarding_profile(service: OnboardingService) -> None:
+    created = service.create_profile(
+        OnboardingCreate(username="Amara Mensah", interests=["Biology"], age=20)
+    )
+    service.delete_profile(created.id)
+    with pytest.raises(NotFoundError):
+        service.get_profile(created.id)
+
+
+def test_delete_nonexistent_profile_raises_not_found(service: OnboardingService) -> None:
+    with pytest.raises(NotFoundError):
+        service.delete_profile(999)
+
