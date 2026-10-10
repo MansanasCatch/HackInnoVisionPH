@@ -1,14 +1,19 @@
 import {
-  ActiveModelStatus,
-  DeviceSpecs,
-  DeviceSuggestions,
+  ActiveModelResponse,
+  DeviceSpecsCreate,
+  DeviceSpecsDetect,
+  DeviceSpecsRead,
   GeneratedLearningResource,
   HealthResponse,
   KnowledgeMapResponse,
   LearningResourceRead,
   LearningResourceVersionRead,
+  ModelSelectPayload,
+  ModelSuggestionsResponse,
+  OllamaModelsResponse,
   OnboardingCreate,
   OnboardingProfile,
+  OnboardingUpdate,
   StudyAnswerCreate,
   StudySessionCompletePayload,
   StudySessionRead,
@@ -17,7 +22,7 @@ import {
 
 const BASE_URL = "/api/v1";
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number;
   data: any;
 
@@ -29,23 +34,40 @@ class ApiError extends Error {
   }
 }
 
+/** Extract a human-readable message from the backend's error payload shapes. */
+function extractErrorMessage(body: any, status: number): string {
+  if (body && typeof body === "object") {
+    // App errors: { error: { code, message } }
+    if (body.error && typeof body.error === "object" && typeof body.error.message === "string") {
+      return body.error.message;
+    }
+    // HTTPException: { detail: "..." }
+    if (typeof body.detail === "string") return body.detail;
+    // Validation errors: { detail: [{ loc, msg }] }
+    if (Array.isArray(body.detail) && body.detail.length) {
+      return body.detail
+        .map((item: any) => {
+          const field = Array.isArray(item?.loc) ? item.loc.filter((part: unknown) => part !== "body").join(".") : "";
+          return field ? `${field}: ${item?.msg}` : String(item?.msg ?? "Invalid value");
+        })
+        .join("; ");
+    }
+    if (typeof body.message === "string") return body.message;
+  }
+  if (typeof body === "string" && body && !body.startsWith("<")) return body;
+  return `HTTP error ${status}`;
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   const contentType = res.headers.get("content-type") || "";
   if (!res.ok) {
     let errBody: any = null;
-    if (contentType.includes("application/json")) {
-      try {
-        errBody = await res.json();
-      } catch {
-        errBody = await res.text();
-      }
-    } else {
-      errBody = await res.text();
+    try {
+      errBody = contentType.includes("application/json") ? await res.json() : await res.text();
+    } catch {
+      errBody = null;
     }
-    const message =
-      (errBody && typeof errBody === "object" && (errBody.detail || errBody.message)) ||
-      (typeof errBody === "string" && !errBody.startsWith("<!") ? errBody : `HTTP error ${res.status}`);
-    throw new ApiError(message, res.status, errBody);
+    throw new ApiError(extractErrorMessage(errBody, res.status), res.status, errBody);
   }
 
   if (!contentType.includes("application/json")) {
@@ -54,6 +76,40 @@ async function handleResponse<T>(res: Response): Promise<T> {
   }
 
   return res.json() as Promise<T>;
+}
+
+/** fetch wrapper that converts network failures/timeouts into a typed ApiError (status 0). */
+async function request(url: string, init: RequestInit = {}, timeoutMs = 20000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: init.signal ?? controller.signal });
+  } catch (err) {
+    const aborted = err instanceof DOMException && err.name === "AbortError";
+    throw new ApiError(
+      aborted
+        ? "The Calibrat8 backend took too long to respond. Please try again."
+        : "Can't reach the Calibrat8 backend. Make sure `python run.py` is running.",
+      0,
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function jsonInit(method: string, body: unknown): RequestInit {
+  return {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  };
+}
+
+/** Turn any thrown value into a short user-facing message. */
+export function describeApiError(err: unknown): string {
+  if (err instanceof ApiError) return err.message;
+  if (err instanceof Error) return err.message;
+  return "Something went wrong. Please try again.";
 }
 
 export const api = {
@@ -75,87 +131,94 @@ export const api = {
 
   // Onboarding
   async createOnboarding(data: OnboardingCreate): Promise<OnboardingProfile> {
-    const res = await fetch(`${BASE_URL}/onboarding`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
+    const res = await request(`${BASE_URL}/onboarding`, jsonInit("POST", data));
     return handleResponse<OnboardingProfile>(res);
   },
 
+  async listOnboarding(limit = 100, offset = 0): Promise<OnboardingProfile[]> {
+    const res = await request(`${BASE_URL}/onboarding?limit=${limit}&offset=${offset}`);
+    return handleResponse<OnboardingProfile[]>(res);
+  },
+
   async getOnboardingByUser(username: string): Promise<OnboardingProfile | null> {
-    const res = await fetch(`${BASE_URL}/onboarding/user/${encodeURIComponent(username)}`);
+    const res = await request(`${BASE_URL}/onboarding/user/${encodeURIComponent(username)}`);
     if (res.status === 404) return null;
     return handleResponse<OnboardingProfile>(res);
   },
 
-  async getOnboardingById(id: number): Promise<OnboardingProfile> {
-    const res = await fetch(`${BASE_URL}/onboarding/${id}`);
+  async getOnboardingById(id: number): Promise<OnboardingProfile | null> {
+    const res = await request(`${BASE_URL}/onboarding/${id}`);
+    if (res.status === 404) return null;
     return handleResponse<OnboardingProfile>(res);
   },
 
-  // Device & Models
-  async detectDevice(): Promise<DeviceSpecs> {
-    const res = await fetch(`${BASE_URL}/device/detect`, {
-      method: "POST",
-    });
-    const data = await handleResponse<any>(res);
-    return {
-      device_type: data.device_type || (data.ram_gb >= 16 ? "Desktop" : "Laptop"),
-      os: data.os || data.os_name || "Windows",
-      cpu_cores: data.cpu_cores || 8,
-      ram_gb: data.ram_gb || 16,
-      gpu_available: Boolean(data.gpu_name && !data.gpu_name.includes("Standard")),
-      gpu_name: data.gpu_name || null,
-      vram_gb: data.vram_gb || 0,
-      storage_free_gb: data.storage_free_gb || 50,
-    };
+  async updateOnboarding(id: number, data: OnboardingUpdate): Promise<OnboardingProfile> {
+    const res = await request(`${BASE_URL}/onboarding/${id}`, jsonInit("PUT", data));
+    return handleResponse<OnboardingProfile>(res);
   },
 
-  async getDeviceSuggestions(specs?: DeviceSpecs | null): Promise<DeviceSuggestions> {
-    const params = new URLSearchParams();
-    if (specs?.ram_gb) params.append("ram_gb", String(specs.ram_gb));
-    if (specs?.vram_gb) params.append("vram_gb", String(specs.vram_gb));
-    if (specs?.gpu_name) params.append("gpu_name", specs.gpu_name);
-    const queryString = params.toString() ? `?${params.toString()}` : "";
-    const res = await fetch(`${BASE_URL}/device/suggestions${queryString}`);
-    const data = await handleResponse<any>(res);
-
-    // Normalize backend ModelSuggestionsResponse to frontend DeviceSuggestions format
-    return {
-      hardware_tier: data.recommended_model || "Balanced",
-      recommended_models: data.models?.map((m: any) => m.model_name) || ["llama3.2:1b"],
-      max_model_size_b: 3.8,
-      warning_notes: [],
-      is_hardware_supported: true,
-      is_gpu_recommended: Boolean(specs?.gpu_available),
-    };
+  async deleteOnboarding(id: number): Promise<void> {
+    const res = await request(`${BASE_URL}/onboarding/${id}`, { method: "DELETE" });
+    if (!res.ok && res.status !== 204 && res.status !== 404) {
+      let errBody: any = null;
+      try {
+        errBody = await res.json();
+      } catch {
+        errBody = null;
+      }
+      throw new ApiError(extractErrorMessage(errBody, res.status), res.status, errBody);
+    }
   },
 
-  async saveDeviceSpecs(specs: DeviceSpecs): Promise<DeviceSpecs> {
-    const res = await fetch(`${BASE_URL}/device`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(specs),
-    });
-    return handleResponse<DeviceSpecs>(res);
+  // Device & AI Model Setup
+  async detectDevice(): Promise<DeviceSpecsDetect> {
+    const res = await request(`${BASE_URL}/device/detect`, { method: "POST" });
+    return handleResponse<DeviceSpecsDetect>(res);
   },
 
-  async selectModel(modelTag: string, onboardingId?: number): Promise<{ message: string; selected_model: string }> {
-    const res = await fetch(`${BASE_URL}/device/select-model`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model_tag: modelTag, onboarding_id: onboardingId }),
-    });
-    return handleResponse<{ message: string; selected_model: string }>(res);
+  async getDeviceSuggestions(params: {
+    ram_gb?: number | null;
+    vram_gb?: number | null;
+    gpu_name?: string | null;
+    onboarding_id?: number | null;
+  } = {}): Promise<ModelSuggestionsResponse> {
+    const query = new URLSearchParams();
+    if (params.ram_gb != null && params.ram_gb >= 0.5) query.append("ram_gb", String(params.ram_gb));
+    if (params.vram_gb != null && params.vram_gb >= 0) query.append("vram_gb", String(params.vram_gb));
+    if (params.gpu_name) query.append("gpu_name", params.gpu_name);
+    if (params.onboarding_id != null) query.append("onboarding_id", String(params.onboarding_id));
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    const res = await request(`${BASE_URL}/device/suggestions${queryString}`);
+    return handleResponse<ModelSuggestionsResponse>(res);
   },
 
-  async getActiveModel(onboardingId?: number): Promise<ActiveModelStatus> {
-    const url = onboardingId
+  async saveDeviceSpecs(payload: DeviceSpecsCreate): Promise<DeviceSpecsRead> {
+    const res = await request(`${BASE_URL}/device`, jsonInit("POST", payload));
+    return handleResponse<DeviceSpecsRead>(res);
+  },
+
+  async getDeviceByAccount(onboardingId: number): Promise<DeviceSpecsRead | null> {
+    const res = await request(`${BASE_URL}/device/account/${onboardingId}`);
+    if (res.status === 404) return null;
+    return handleResponse<DeviceSpecsRead>(res);
+  },
+
+  async selectModel(payload: ModelSelectPayload): Promise<DeviceSpecsRead> {
+    const res = await request(`${BASE_URL}/device/select-model`, jsonInit("POST", { auto_pull: true, ...payload }));
+    return handleResponse<DeviceSpecsRead>(res);
+  },
+
+  async getActiveModel(onboardingId?: number | null): Promise<ActiveModelResponse> {
+    const url = onboardingId != null
       ? `${BASE_URL}/device/active-model?onboarding_id=${onboardingId}`
       : `${BASE_URL}/device/active-model`;
-    const res = await fetch(url);
-    return handleResponse<ActiveModelStatus>(res);
+    const res = await request(url);
+    return handleResponse<ActiveModelResponse>(res);
+  },
+
+  async listOllamaModels(): Promise<OllamaModelsResponse> {
+    const res = await request(`${BASE_URL}/device/ollama/models`);
+    return handleResponse<OllamaModelsResponse>(res);
   },
 
   // Learning Resources & Generation

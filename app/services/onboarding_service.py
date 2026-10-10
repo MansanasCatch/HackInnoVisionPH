@@ -65,3 +65,11 @@ class OnboardingService:
 
         updated = self._repository.update(profile)
         return OnboardingRead.model_validate(updated)
+
+    def delete_profile(self, profile_id: int) -> None:
+        """Delete an existing onboarding profile."""
+        profile = self._repository.get(profile_id)
+        if profile is None:
+            raise NotFoundError(f"Onboarding profile with ID {profile_id} was not found.")
+        self._repository.delete(profile)
+

@@ -38,10 +38,25 @@ def ensure_ollama_started(base_url: str = OLLAMA_BASE_URL) -> bool:
         logger.info("Ollama local service is running at %s", base_url)
         return True
 
+    import os
+
     ollama_path = shutil.which("ollama")
     if not ollama_path:
+        candidates = [
+            "/opt/homebrew/bin/ollama",
+            "/usr/local/bin/ollama",
+            "/Applications/Ollama.app/Contents/Resources/ollama",
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe"),
+            os.path.expandvars(r"%ProgramFiles%\Ollama\ollama.exe"),
+        ]
+        for candidate in candidates:
+            if os.path.isfile(candidate) and (os.name == "nt" or os.access(candidate, os.X_OK)):
+                ollama_path = candidate
+                break
+
+    if not ollama_path:
         logger.warning(
-            "Ollama executable not found in system PATH. "
+            "Ollama executable not found in system PATH or standard install locations. "
             "Install Ollama (https://ollama.com) to enable local AI auto-start."
         )
         return False

@@ -138,3 +138,36 @@ def test_device_setup_nonexistent_account_raises_not_found(device_service: Devic
                 storage_free_gb=50.0,
             )
         )
+
+
+def test_macos_apple_silicon_recommendation() -> None:
+    res = recommend_models_for_hardware(ram_gb=16.0, vram_gb=12.0, gpu_name="Apple M2 Pro (Metal GPU)")
+    assert res.recommended_model in ("llama3.2:3b", "mistral:7b")
+    # Verify Apple Silicon Metal reasons are generated
+    assert any("Apple Silicon" in m.reason for m in res.models if m.is_recommended)
+    assert any("Metal" in m.reason for m in res.models if m.is_recommended)
+
+
+def test_windows_nvidia_gpu_recommendation() -> None:
+    res = recommend_models_for_hardware(ram_gb=16.0, vram_gb=8.0, gpu_name="NVIDIA GeForce RTX 4060")
+    assert res.recommended_model == "llama3.2:3b"
+    assert any("NVIDIA" in m.reason for m in res.models if m.is_recommended)
+    assert any("Fits in dedicated VRAM" in m.reason for m in res.models if m.is_recommended)
+
+
+def test_cross_platform_os_name_detection(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services.device_detection import _detect_os_name
+
+    # 1. Test macOS detection
+    monkeypatch.setattr("platform.system", lambda: "Darwin")
+    monkeypatch.setattr("platform.mac_ver", lambda: ("14.5", ("", "", ""), ""))
+    assert _detect_os_name() == "macOS 14.5 (Sonoma)"
+
+    # 2. Test macOS Sequoia detection
+    monkeypatch.setattr("platform.mac_ver", lambda: ("15.1", ("", "", ""), ""))
+    assert _detect_os_name() == "macOS 15.1 (Sequoia)"
+
+    # 3. Test Windows detection
+    monkeypatch.setattr("platform.system", lambda: "Windows")
+    monkeypatch.setattr("platform.release", lambda: "11")
+    assert _detect_os_name() == "Windows 11"

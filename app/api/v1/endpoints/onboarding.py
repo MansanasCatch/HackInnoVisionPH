@@ -81,3 +81,18 @@ def update_onboarding_profile(
 ) -> OnboardingRead:
     """Update an onboarding profile."""
     return service.update_profile(profile_id, payload)
+
+
+@router.delete(
+    "/{profile_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete onboarding profile",
+    description="Delete an onboarding profile and its associated data.",
+)
+def delete_onboarding_profile(
+    profile_id: int,
+    service: OnboardingServiceDep,
+) -> None:
+    """Delete an onboarding profile by ID."""
+    service.delete_profile(profile_id)
+
