@@ -16,6 +16,16 @@ class ExtractedFileContent(BaseModel):
     base64_data: str | None = Field(default=None, description="Base64 encoded string if image file")
 
 
+class DocumentExtractResponse(BaseModel):
+    """Schema for document extraction result."""
+
+    success: bool = Field(default=True, description="Whether extraction succeeded")
+    total_files: int = Field(description="Number of files processed")
+    files: list[ExtractedFileContent] = Field(
+        default_factory=list, description="Extracted content per file"
+    )
+
+
 class AIGenerateRequest(BaseModel):
     """Payload for text prompt AI generation."""
 

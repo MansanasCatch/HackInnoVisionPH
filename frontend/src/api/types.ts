@@ -302,3 +302,19 @@ export interface AIGenerateResponse {
   execution_time_seconds: number;
   is_ollama_online: boolean;
 }
+
+export interface ExtractedFileContent {
+  filename: string;
+  file_type: string;
+  content_type: string;
+  character_count: number;
+  extracted_text: string;
+  base64_data?: string | null;
+}
+
+export interface DocumentExtractResponse {
+  success: boolean;
+  total_files: number;
+  files: ExtractedFileContent[];
+}
+

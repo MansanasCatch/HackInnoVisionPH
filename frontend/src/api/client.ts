@@ -3,6 +3,7 @@ import {
   DeviceSpecsCreate,
   DeviceSpecsDetect,
   DeviceSpecsRead,
+  DocumentExtractResponse,
   GeneratedLearningResource,
   HealthResponse,
   KnowledgeMapResponse,
@@ -219,6 +220,18 @@ export const api = {
   async listOllamaModels(): Promise<OllamaModelsResponse> {
     const res = await request(`${BASE_URL}/device/ollama/models`);
     return handleResponse<OllamaModelsResponse>(res);
+  },
+
+  // Document & File Extraction
+  async extractDocuments(files: File[]): Promise<DocumentExtractResponse> {
+    const formData = new FormData();
+    files.forEach((file) => formData.append("files", file));
+
+    const res = await fetch(`${BASE_URL}/ai/extract-text`, {
+      method: "POST",
+      body: formData,
+    });
+    return handleResponse<DocumentExtractResponse>(res);
   },
 
   // Learning Resources & Generation

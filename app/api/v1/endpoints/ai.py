@@ -2,16 +2,53 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.api.deps import LocalAIServiceDep
 from app.api.uploads import read_uploads
 from app.schemas.ai import (
     AIGenerateRequest,
     AIGenerateResponse,
+    DocumentExtractResponse,
 )
+from app.services.file_parser import parse_uploaded_file
 
 router = APIRouter(prefix="/ai", tags=["Local AI & File Ingestion"])
+
+
+@router.post(
+    "/extract-text",
+    response_model=DocumentExtractResponse,
+    summary="Extract clean text from uploaded documents (PDF, Word, Excel, CSV, Image, Text)",
+    description=(
+        "Extracts textual content, page numbers, and metadata from uploaded files "
+        "and returns structured JSON."
+    ),
+)
+async def extract_text(
+    files: Annotated[
+        UploadFile | list[UploadFile] | None,
+        File(description="Attached document or PDF files to extract"),
+    ] = None,
+) -> DocumentExtractResponse:
+    """Extract text from uploaded documents and return structured JSON."""
+    uploaded = await read_uploads(files)
+    if not uploaded:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one file must be provided for extraction.",
+        )
+
+    extracted_files = [
+        parse_uploaded_file(filename=filename, content_bytes=content, content_type=ct)
+        for filename, content, ct in uploaded
+    ]
+
+    return DocumentExtractResponse(
+        success=True,
+        total_files=len(extracted_files),
+        files=extracted_files,
+    )
 
 
 @router.post(
@@ -79,3 +116,4 @@ async def generate_with_files(
     )
 
     return service.generate(request=req, uploaded_files=uploaded_files)
+
