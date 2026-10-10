@@ -1,6 +1,7 @@
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { api, ApiError, describeApiError } from "./api/client";
 import { mapAgeRangeToNumber, mapAgeToRange } from "./api/mappers";
+import StudyMode from "./StudyMode";
 import type {
   ActiveModelResponse,
   DeviceSpecsDetect,
@@ -507,6 +508,7 @@ function Tutor({
   </div>;
 }
 
+<<<<<<< HEAD
 const initialTopics = ["Quadratic equations", "Cell division", "French Revolution", "Organic chemistry", "Essay structure"];
 const schedule = [
   { topic: "Quadratic equations", activity: "Examples + practice", time: 30, tone: "coral" },
@@ -619,6 +621,8 @@ function Focus({
     </main>
   </div>;
 }
+=======
+>>>>>>> origin/main
 
 type IngestedFile = { name: string; size: string; type: string };
 type Attempt = {
@@ -1015,8 +1019,16 @@ function QuizViewer({
 }
 
 function SessionCompletion({ attempt, go }: { attempt: Attempt; go: (page: Page) => void }) {
-  const percentage = Math.round((attempt.score / attempt.total) * 100);
+  const percentage = attempt.total ? Math.round((attempt.score / attempt.total) * 100) : 0;
+  if (attempt.source === "study") return <div className="page completion-page"><section className="completion-card panel">
+    <div className="completion-calibrat8 flying-calibrat8"><Calibrat8 size="large" image="/calibrat8-flying-laptop.png"/></div><Badge>SESSION COMPLETED</Badge>
+    <h2>{attempt.total ? "Your study answers are saved." : "Your reading session is complete."}</h2>
+    <p>The session and resource progress were saved to your account. The next version is ready when you return to Study Mode.</p>
+    <div className="summary-stats"><span><strong>{attempt.total ? `${attempt.score}/${attempt.total}` : "Read"}</strong><small>{attempt.total ? "Correct answers" : "Resource completed"}</small></span><span><strong>{attempt.concepts.filter(item => !item.correct).length}</strong><small>Topics to revisit</small></span></div>
+    <div className="completion-actions"><Button onClick={() => go("planner")} icon="play">Study another version</Button><Button variant="secondary" onClick={() => go("library")} icon="book">Learning resources</Button></div>
+  </section></div>;
   return <div className="page completion-page"><section className="completion-card panel"><div className="completion-calibrat8 flying-calibrat8"><span className="calibrat8-art calibrat8-large" style={{ backgroundImage: 'url("/calibrat8-flying-laptop.png")', position: "relative", inset: "auto", margin: "0 auto" }} role="img" aria-label="Calibrat8 flying with a laptop"/></div><Badge>SESSION COMPLETED</Badge><h2>{percentage === 100 ? "Wonderful focus—you understood every check." : "Nice progress. Every answer gives us a clearer next step."}</h2><p>Calibrat8 saved this result locally and used only your submitted answers to update the knowledge map.</p><div className="summary-stats"><span><strong>{attempt.score}/{attempt.total}</strong><small>Correct answers</small></span><span><strong>{attempt.concepts.filter(item => !item.correct).length}</strong><small>Topics to revisit</small></span><span><strong>Saved</strong><small>On this device</small></span></div><div className="recalc-state"><span><Icon name="check"/></span><p><strong>Knowledge map updated</strong><small>Recommendations now reflect this session’s evidence.</small></p></div><div className="completion-actions"><Button onClick={() => go("knowledge")} icon="layers">View knowledge map</Button><Button variant="secondary" onClick={() => go("recommendations")} icon="spark">See next steps</Button></div></section></div>;
+
 }
 
 function KnowledgeMap({
@@ -2354,12 +2366,12 @@ export default function App() {
     persistProfiles(nextProfiles, activeProfileId);
     setPage("completion");
   };
-  const completeStudy = (score: number, total: number) => saveAttempt({
+  const completeStudy = (score: number, total: number, concepts: { name: string; correct: boolean }[]) => saveAttempt({
     score,
     total,
     completedAt: new Date().toISOString(),
     source: "study",
-    concepts: [{ name: "Inverse operations", correct: score === total }],
+    concepts,
   });
   const [deleteConfirmFromSettings, setDeleteConfirmFromSettings] = useState(false);
   const [isDeletingFromSettings, setIsDeletingFromSettings] = useState(false);
@@ -2430,7 +2442,18 @@ export default function App() {
     onDeleteProfile={handleDeleteProfile}
     onCancel={() => { setSetupOpen(false); setEditingProfile(false); setCreatingNewProfile(false); }}
   />;
-  if (page === "focus") return <Focus exit={() => setPage("library")} completeSession={completeStudy} material={generatedMaterial}/>;
+  if (page === "focus") {
+    return profile.onboardingId != null ? (
+      <StudyMode
+        key={activeProfileId}
+        onboardingId={profile.onboardingId}
+        onComplete={completeStudy}
+        onExit={() => setPage("library")}
+      />
+    ) : (
+      <Focus exit={() => setPage("library")} completeSession={completeStudy} material={generatedMaterial}/>
+    );
+  }
   const titles: Record<Page, string> = {
     home: "Home", tutor: "AI Tutor", planner: "Study Mode", focus: "Focus", lessons: "Lessons",
     ingest: "Import Materials", generation: "AI Processing", library: "Learning Resources",
@@ -2455,7 +2478,7 @@ export default function App() {
     <main className="main-shell"><Topbar title={titles[page]} online={online} setOnline={setOnline}/>
       {page === "home" && <Home go={setPage} online={online} openOffline={() => setOfflineOpen(true)} profile={profile}/>}
       {page === "tutor" && <Tutor online={online}/>}
-      {page === "planner" && <Planner start={() => setPage("focus")}/>}
+      {page === "planner" && <StudyMode key={activeProfileId} onboardingId={profile.onboardingId} onComplete={completeStudy} onExit={() => setPage("library")}/>}
       {page === "lessons" && <Lessons online={online} addMaterial={() => setPage("ingest")}/>}
       {page === "ingest" && <ContentIngestion online={online} done={next => setPage(next || "library")} onPrepareMaterial={setPreparedMaterial}/>}
       {page === "generation" && <Generation online={online} profile={profile} preparedMaterial={preparedMaterial} back={() => setPage("ingest")} finish={() => setPage("library")} onResourceGenerated={setGeneratedMaterial}/>}

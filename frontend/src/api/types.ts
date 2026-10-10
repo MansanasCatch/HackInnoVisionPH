@@ -237,10 +237,20 @@ export interface StudySessionRead {
   mode: string;
   source: string;
   score: number | null;
+  total_items: number;
+  correct_items: number;
+  accuracy: number;
   time_spent_seconds: number;
-  is_completed: boolean;
+  first_time_for_version: boolean;
   started_at: string;
   completed_at: string | null;
+}
+
+export interface StudySessionCompleteResponse {
+  session: StudySessionRead;
+  progress: VersionProgressRead;
+  new_version_id: number | null;
+  archived_version_number: number | null;
 }
 
 export interface StudyAnswerCreate {
