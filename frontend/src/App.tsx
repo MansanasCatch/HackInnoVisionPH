@@ -1,6 +1,7 @@
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { api, ApiError, describeApiError } from "./api/client";
 import { mapAgeRangeToNumber, mapAgeToRange } from "./api/mappers";
+import StudyMode from "./StudyMode";
 import type {
   ActiveModelResponse,
   DeviceSpecsDetect,
@@ -450,80 +451,6 @@ function Tutor({ online }: { online: boolean }) {
   </div>;
 }
 
-const initialTopics = ["Quadratic equations", "Cell division", "French Revolution", "Organic chemistry", "Essay structure"];
-const schedule = [
-  { topic: "Quadratic equations", activity: "Examples + practice", time: 30, tone: "coral" },
-  { topic: "Cell division", activity: "Summary + flashcards", time: 25, tone: "sage" },
-  { topic: "Break", activity: "Step away and reset", time: 10, tone: "neutral" },
-  { topic: "Organic chemistry", activity: "Key concepts + quiz", time: 25, tone: "blue" },
-  { topic: "French Revolution", activity: "Timeline review", time: 20, tone: "peach" },
-  { topic: "Essay structure", activity: "Recall + outline", time: 10, tone: "sage" },
-];
-
-function Planner({ start }: { start: () => void }) {
-  const [studyMode, setStudyMode] = useState<"Learn" | "Practice" | "Review">("Learn");
-  const [plannerStep, setPlannerStep] = useState(0);
-  const [selectedMaterials, setSelectedMaterials] = useState(["Notes Summary / Key Notes"]);
-  const modeDetails = [
-    { name: "Learn" as const, icon: "book" as IconName, copy: "Build understanding with key notes, explanations, and guided examples." },
-    { name: "Practice" as const, icon: "quiz" as IconName, copy: "Answer targeted questions and get immediate feedback on each concept." },
-    { name: "Review" as const, icon: "cards" as IconName, copy: "Refresh earlier material with summaries, recall cards, and quick checks." },
-  ];
-  const materialOptions = [
-    { name: "Notes Summary / Key Notes", icon: "book" as IconName, copy: "Load concise summaries, definitions, and important takeaways.", time: 10, tone: "sage" },
-    { name: "Flashcards", icon: "cards" as IconName, copy: "Load question-and-answer cards for active recall.", time: 10, tone: "coral" },
-    { name: "Quizzes / Exam / Reviewer", icon: "quiz" as IconName, copy: "Load practice questions, reviewer items, and answer checks.", time: 15, tone: "blue" },
-  ];
-  const loadedMaterials = materialOptions.filter(material => selectedMaterials.includes(material.name));
-  const totalMinutes = loadedMaterials.reduce((total, material) => total + material.time, 0);
-  const toggleMaterial = (material: string) => setSelectedMaterials(current => current.includes(material) ? current.filter(item => item !== material) : [...current, material]);
-  const stepTitles = ["Choose your study mode", "Choose learning materials", "Review your session"];
-  return <div className="page planner-page">
-    <section className="planner-head"><div><Badge tone="peach">STUDY MODE</Badge><h2>{stepTitles[plannerStep]}</h2><p>Complete one simple step at a time.</p></div>{plannerStep === 2 && <div className="duration-card"><Icon name="clock"/><span><small>ESTIMATED TIME</small><strong>{totalMinutes} min</strong></span></div>}</section>
-    <section className="panel topic-panel">
-      <div className="section-heading"><div><p className="eyebrow">STEP {plannerStep + 1} OF 3</p><h3>{stepTitles[plannerStep]}</h3></div><Badge tone="neutral">{Math.round((plannerStep + 1) / 3 * 100)}%</Badge></div>
-      <div className="onboarding-progress" aria-label={`Study setup step ${plannerStep + 1} of 3`}><span style={{ width: `${(plannerStep + 1) / 3 * 100}%` }}/></div>
-    </section>
-
-    {plannerStep === 0 && <section className="panel topic-panel section-block">
-      <div className="section-heading"><div><p className="eyebrow">CHOOSE ONE</p><h3>How do you want to study?</h3></div><Badge tone="neutral">{studyMode}</Badge></div>
-      <div className="learning-styles">{modeDetails.map(mode => <button key={mode.name} className={studyMode === mode.name ? "selected" : ""} onClick={() => setStudyMode(mode.name)} aria-pressed={studyMode === mode.name}><span><Icon name={mode.icon}/></span><div><strong>{mode.name}</strong><p>{mode.copy}</p></div><i>{studyMode === mode.name && <Icon name="check" size={15}/>}</i></button>)}</div>
-      <div className="setup-actions"><Button onClick={() => setPlannerStep(1)} icon="arrow">Choose topics</Button></div>
-    </section>}
-
-    {plannerStep === 1 && <section className="panel topic-panel section-block">
-      <div className="section-heading"><div><p className="eyebrow">LOAD FOR STUDY</p><h3>Which materials do you want?</h3></div><Badge tone="neutral">{selectedMaterials.length} selected</Badge></div>
-      <p className="muted">Choose one or more saved resources to use in this session.</p>
-      <div className="learning-styles">{materialOptions.map(material => <button key={material.name} className={selectedMaterials.includes(material.name) ? "selected" : ""} onClick={() => toggleMaterial(material.name)} aria-pressed={selectedMaterials.includes(material.name)}><span><Icon name={material.icon}/></span><div><strong>{material.name}</strong><p>{material.copy}</p></div><i>{selectedMaterials.includes(material.name) && <Icon name="check" size={15}/>}</i></button>)}</div>
-      <div className="setup-actions"><Button variant="secondary" onClick={() => setPlannerStep(0)}>Back</Button><Button disabled={selectedMaterials.length === 0} onClick={() => setPlannerStep(2)} icon="arrow">Review plan</Button></div>
-    </section>}
-
-    {plannerStep === 2 && <section className="panel schedule-panel section-block">
-      <div className="section-heading"><div><p className="eyebrow">{studyMode.toUpperCase()} SESSION</p><h3>Materials ready to load</h3></div><span className="time-total"><Icon name="clock" size={16}/> {totalMinutes} min</span></div>
-      <div className="schedule-list">{loadedMaterials.map((material, index) => <div className="schedule-item" key={material.name}><span className={`schedule-index ${material.tone}`}><Icon name={material.icon} size={15}/></span><span><strong>{material.name}</strong><small>{material.copy}</small></span><div className="schedule-time"><strong>{material.time}</strong><small>min</small></div><Icon name="check" size={17}/></div>)}</div>
-      <div className="planner-reason"><Icon name="spark"/><p><strong>{studyMode} mode selected.</strong> Study Mode will load only the {selectedMaterials.length === 1 ? "resource" : "resources"} you selected.</p></div>
-      <div className="setup-actions"><Button variant="secondary" onClick={() => setPlannerStep(1)}>Back</Button><Button onClick={start} icon="play">Start {studyMode.toLowerCase()} session</Button></div>
-    </section>}
-  </div>;
-}
-
-function Focus({ exit, completeSession }: { exit: () => void; completeSession: (score: number, total: number) => void }) {
-  const [step, setStep] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const [flipped, setFlipped] = useState(false);
-  const [answer, setAnswer] = useState<number | null>(null);
-  return <div className="focus-shell">
-    <header className="focus-header"><button className="brand" onClick={exit}><span className="brand-mark"><Icon name="spark" size={18}/></span><span>Calibrat8</span></button><div className="focus-progress"><span><strong>Quadratic equations</strong><small>Activity {step + 1} of 3 · {25 - step * 8} min remaining</small></span><div><i style={{ width: `${(step + 1) * 33}%` }}/></div></div><Button onClick={() => setPaused(!paused)} variant="secondary" icon={paused ? "play" : "pause"}>{paused ? "Resume" : "Pause"}</Button></header>
-    <main className="focus-main" aria-label={`Study activity ${step + 1} of 3`}>
-      {paused ? <div className="pause-state"><div className="complete-mark"><Icon name="pause"/></div><h2>Session paused.</h2><p>Take the time you need. Your place is saved on this device.</p><Button onClick={() => setPaused(false)} icon="play">Resume when ready</Button></div> :
-      <><div className="focus-kicker"><span>ACTIVITY {step + 1}</span><div className="flex items-center gap-2"><span className="flex gap-1.5" aria-label={`${step + 1} of 3 activities complete`}>{[0, 1, 2].map(index => <i key={index} aria-hidden="true" className={`block h-1.5 rounded-full transition-all duration-300 motion-reduce:transition-none ${index === step ? "w-6 bg-[var(--sage)]" : index < step ? "w-1.5 bg-[var(--blue)]" : "w-1.5 bg-[var(--line)]"}`}/>)}</span><Badge tone="blue">{step === 0 ? "CONCEPT" : step === 1 ? "FLASHCARD" : "QUICK CHECK"}</Badge></div></div>
-      {step === 0 && <article className="learning-card transition-transform duration-300 hover:-translate-y-0.5 motion-reduce:transition-none"><p className="eyebrow">THE KEY IDEA</p><h2>Undo each operation in reverse order.</h2><p>To isolate <b>x</b>, treat the equation like a wrapped gift. Remove the outermost “layer” first, and do the same thing to both sides.</p><div className="equation group"><span className="rounded-lg px-2 py-1 transition-colors group-hover:bg-[var(--peach-pale)]">2x + 6 = 18</span><Icon name="arrow"/><span className="rounded-lg px-2 py-1 transition-colors group-hover:bg-[var(--blue-pale)]">2x = 12</span><Icon name="arrow"/><span className="rounded-lg bg-[var(--sage-pale)] px-2 py-1 text-[var(--sage-dark)] transition-transform group-hover:scale-110 motion-reduce:transition-none">x = 6</span></div><div className="callout"><Icon name="spark"/><p><strong>Notice the order:</strong> subtract 6 first, then divide by 2. This reverses the original operations.</p></div></article>}
-      {step === 1 && <button type="button" aria-pressed={flipped} aria-label={`${flipped ? "Answer shown" : "Question shown"}. ${flipped ? "Apply the inverse operation to both sides. Tap to show the question." : "How do you keep an equation balanced? Tap to reveal the answer."}`} className={`flashcard group ${flipped ? "flipped" : ""} focus-visible:ring-4 focus-visible:ring-[var(--sage-pale)]`} onClick={() => setFlipped(!flipped)}><span className="eyebrow">{flipped ? "ANSWER REVEALED" : "TAP TO REVEAL"}</span><strong className="transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none">{flipped ? "Apply the inverse operation to both sides." : "How do you keep an equation balanced?"}</strong><small>{flipped ? "Whatever you do to one side, do to the other. Tap again to review the question." : "Think about the balance-scale analogy."}</small><span aria-hidden="true" className={`grid size-10 place-items-center rounded-full transition-transform duration-300 group-hover:rotate-180 motion-reduce:transition-none ${flipped ? "bg-white/15 text-white" : "bg-[var(--sage-pale)] text-[var(--sage)]"}`}><Icon name="more"/></span></button>}
-      {step === 2 && <article className="learning-card quiz-card"><p className="eyebrow">TRY THIS</p><h2>What is the first step to solve 3x − 4 = 11?</h2>{["Divide both sides by 3", "Add 4 to both sides", "Subtract 11 from both sides"].map((x, i) => <button type="button" key={x} className={`answer-option group transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--sage)]! hover:bg-[var(--mist)]! hover:shadow-sm active:scale-95 motion-reduce:transition-none ${answer === i ? "selected" : ""}`} onClick={() => setAnswer(i)} aria-pressed={answer === i} aria-label={`${String.fromCharCode(65 + i)}. ${x}${answer === i ? ", selected" : ""}`}><span className="transition-transform duration-200 group-hover:scale-110 motion-reduce:transition-none">{String.fromCharCode(65 + i)}</span>{x}</button>)}{answer !== null && <div className={`callout mt-4 ${answer === 1 ? "" : "bg-[var(--peach-pale)]! text-[var(--peach)]!"}`} role="status" aria-live="polite"><Icon name={answer === 1 ? "check" : "spark"}/><p><strong>{answer === 1 ? "That’s it." : "Good try—look at the outermost operation."}</strong> {answer === 1 ? "Adding 4 to both sides removes the −4 while keeping the equation balanced." : "Undo subtraction before dividing by the coefficient."}</p></div>}</article>}
-      <div className="focus-footer"><p aria-live="polite">{step === 0 ? "Explore the equation, then continue when you’re ready." : step === 1 ? flipped ? "Nice recall. Review the question or move on." : "Flip the card and test your memory." : answer === null ? "Choose the best first step." : answer === 1 ? "Correct—ready to finish." : "You can try another answer or finish to review."}</p><div className="flex gap-2">{step > 0 && <Button variant="secondary" onClick={() => { if (step === 1) setFlipped(false); if (step === 2) setAnswer(null); setStep(step - 1); }}>Back</Button>}<Button disabled={step === 2 && answer === null} onClick={() => { if (step === 2) completeSession(answer === 1 ? 1 : 0, 1); else { if (step === 0) setFlipped(false); if (step === 1) setAnswer(null); setStep(step + 1); } }} icon="arrow">{step === 2 ? "Finish session" : "Next activity"}</Button></div></div></>}
-    </main>
-  </div>;
-}
 
 type IngestedFile = { name: string; size: string; type: string };
 type Attempt = {
@@ -734,8 +661,16 @@ function QuizViewer({ back, submit }: { back: () => void; submit: (attempt: Atte
 }
 
 function SessionCompletion({ attempt, go }: { attempt: Attempt; go: (page: Page) => void }) {
-  const percentage = Math.round((attempt.score / attempt.total) * 100);
+  const percentage = attempt.total ? Math.round((attempt.score / attempt.total) * 100) : 0;
+  if (attempt.source === "study") return <div className="page completion-page"><section className="completion-card panel">
+    <div className="completion-calibrat8 flying-calibrat8"><Calibrat8 size="large" image="/calibrat8-flying-laptop.png"/></div><Badge>SESSION COMPLETED</Badge>
+    <h2>{attempt.total ? "Your study answers are saved." : "Your reading session is complete."}</h2>
+    <p>The session and resource progress were saved to your account. The next version is ready when you return to Study Mode.</p>
+    <div className="summary-stats"><span><strong>{attempt.total ? `${attempt.score}/${attempt.total}` : "Read"}</strong><small>{attempt.total ? "Correct answers" : "Resource completed"}</small></span><span><strong>{attempt.concepts.filter(item => !item.correct).length}</strong><small>Topics to revisit</small></span></div>
+    <div className="completion-actions"><Button onClick={() => go("planner")} icon="play">Study another version</Button><Button variant="secondary" onClick={() => go("library")} icon="book">Learning resources</Button></div>
+  </section></div>;
   return <div className="page completion-page"><section className="completion-card panel"><div className="completion-calibrat8 flying-calibrat8"><span className="calibrat8-art calibrat8-large" style={{ backgroundImage: 'url("/calibrat8-flying-laptop.png")', position: "relative", inset: "auto", margin: "0 auto" }} role="img" aria-label="Calibrat8 flying with a laptop"/></div><Badge>SESSION COMPLETED</Badge><h2>{percentage === 100 ? "Wonderful focus—you understood every check." : "Nice progress. Every answer gives us a clearer next step."}</h2><p>Calibrat8 saved this result locally and used only your submitted answers to update the knowledge map.</p><div className="summary-stats"><span><strong>{attempt.score}/{attempt.total}</strong><small>Correct answers</small></span><span><strong>{attempt.concepts.filter(item => !item.correct).length}</strong><small>Topics to revisit</small></span><span><strong>Saved</strong><small>On this device</small></span></div><div className="recalc-state"><span><Icon name="check"/></span><p><strong>Knowledge map updated</strong><small>Recommendations now reflect this session’s evidence.</small></p></div><div className="completion-actions"><Button onClick={() => go("knowledge")} icon="layers">View knowledge map</Button><Button variant="secondary" onClick={() => go("recommendations")} icon="spark">See next steps</Button></div></section></div>;
+
 }
 
 function KnowledgeMap({ attempt, recommendations }: { attempt: Attempt | null; recommendations: () => void }) {
@@ -2031,12 +1966,12 @@ export default function App() {
     persistProfiles(nextProfiles, activeProfileId);
     setPage("completion");
   };
-  const completeStudy = (score: number, total: number) => saveAttempt({
+  const completeStudy = (score: number, total: number, concepts: { name: string; correct: boolean }[]) => saveAttempt({
     score,
     total,
     completedAt: new Date().toISOString(),
     source: "study",
-    concepts: [{ name: "Inverse operations", correct: score === total }],
+    concepts,
   });
   const [deleteConfirmFromSettings, setDeleteConfirmFromSettings] = useState(false);
   const [isDeletingFromSettings, setIsDeletingFromSettings] = useState(false);
@@ -2107,7 +2042,7 @@ export default function App() {
     onDeleteProfile={handleDeleteProfile}
     onCancel={() => { setSetupOpen(false); setEditingProfile(false); setCreatingNewProfile(false); }}
   />;
-  if (page === "focus") return <Focus exit={() => setPage("library")} completeSession={completeStudy}/>;
+  if (page === "focus") return <StudyMode onboardingId={profile.onboardingId} onComplete={completeStudy} onExit={() => setPage("library")}/>;
   const titles: Record<Page, string> = {
     home: "Home", tutor: "AI Tutor", planner: "Study Mode", focus: "Focus", lessons: "Lessons",
     ingest: "Import Materials", generation: "AI Processing", library: "Learning Resources",
@@ -2132,7 +2067,7 @@ export default function App() {
     <main className="main-shell"><Topbar title={titles[page]} online={online} setOnline={setOnline}/>
       {page === "home" && <Home go={setPage} online={online} openOffline={() => setOfflineOpen(true)} profile={profile}/>}
       {page === "tutor" && <Tutor online={online}/>}
-      {page === "planner" && <Planner start={() => setPage("focus")}/>}
+      {page === "planner" && <StudyMode key={activeProfileId} onboardingId={profile.onboardingId} onComplete={completeStudy} onExit={() => setPage("library")}/>}
       {page === "lessons" && <Lessons online={online} addMaterial={() => setPage("ingest")}/>}
       {page === "ingest" && <ContentIngestion online={online} done={next => setPage(next || "library")}/>}
       {page === "generation" && <Generation online={online} back={() => setPage("ingest")} finish={() => setPage("library")}/>}

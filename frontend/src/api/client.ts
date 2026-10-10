@@ -16,6 +16,7 @@ import {
   OnboardingUpdate,
   StudyAnswerCreate,
   StudySessionCompletePayload,
+  StudySessionCompleteResponse,
   StudySessionRead,
   VersionProgressRead,
 } from "./types";
@@ -265,8 +266,8 @@ export const api = {
     return handleResponse<LearningResourceVersionRead[]>(res);
   },
 
-  async getVersionProgress(versionId: number, onboardingId: number): Promise<VersionProgressRead> {
-    const res = await fetch(`${BASE_URL}/learning-resources/versions/${versionId}/progress?onboarding_id=${onboardingId}`);
+  async getVersionProgress(resourceId: number, versionId: number, onboardingId: number): Promise<VersionProgressRead> {
+    const res = await fetch(`${BASE_URL}/learning-resources/${resourceId}/versions/${versionId}/progress?onboarding_id=${onboardingId}`);
     return handleResponse<VersionProgressRead>(res);
   },
 
@@ -294,13 +295,13 @@ export const api = {
     return handleResponse<any>(res);
   },
 
-  async completeStudySession(sessionId: number, payload: StudySessionCompletePayload): Promise<StudySessionRead> {
+  async completeStudySession(sessionId: number, payload: StudySessionCompletePayload): Promise<StudySessionCompleteResponse> {
     const res = await fetch(`${BASE_URL}/study-sessions/${sessionId}/complete`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    return handleResponse<StudySessionRead>(res);
+    return handleResponse<StudySessionCompleteResponse>(res);
   },
 
   async listStudySessions(onboardingId: number, limit: number = 50): Promise<StudySessionRead[]> {
