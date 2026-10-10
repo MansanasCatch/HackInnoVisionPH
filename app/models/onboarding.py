@@ -9,6 +9,12 @@ from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.device import DeviceSpecs
+    from app.models.learning_resource import LearningResource
+    from app.models.study import (
+        ArchivedVersionAnalytics,
+        StudySession,
+        UserVersionProgress,
+    )
 
 
 class OnboardingProfile(Base, TimestampMixin):
@@ -23,6 +29,18 @@ class OnboardingProfile(Base, TimestampMixin):
 
     device_specs: Mapped["DeviceSpecs | None"] = relationship(
         "DeviceSpecs", back_populates="onboarding", uselist=False, cascade="all, delete-orphan"
+    )
+    learning_resources: Mapped[list["LearningResource"]] = relationship(
+        "LearningResource", cascade="all, delete-orphan", passive_deletes=True
+    )
+    study_sessions: Mapped[list["StudySession"]] = relationship(
+        "StudySession", cascade="all, delete-orphan", passive_deletes=True
+    )
+    version_progress: Mapped[list["UserVersionProgress"]] = relationship(
+        "UserVersionProgress", cascade="all, delete-orphan", passive_deletes=True
+    )
+    archived_analytics: Mapped[list["ArchivedVersionAnalytics"]] = relationship(
+        "ArchivedVersionAnalytics", cascade="all, delete-orphan", passive_deletes=True
     )
 
     def __repr__(self) -> str:

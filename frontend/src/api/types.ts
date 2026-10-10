@@ -1,3 +1,7 @@
+// ---------------------------------------------------------------------------
+// Onboarding (mirrors app/schemas/onboarding.py)
+// ---------------------------------------------------------------------------
+
 export interface OnboardingProfile {
   id: number;
   username: string;
@@ -13,34 +17,98 @@ export interface OnboardingCreate {
   interests: string[];
 }
 
-export interface DeviceSpecs {
-  id?: number;
-  onboarding_id?: number | null;
-  device_type: string;
-  os: string;
-  cpu_cores: number;
+export interface OnboardingUpdate {
+  username?: string | null;
+  age?: number | null;
+  interests?: string[] | null;
+}
+
+// ---------------------------------------------------------------------------
+// Device & AI Model Setup (mirrors app/schemas/device.py)
+// ---------------------------------------------------------------------------
+
+/** Auto-detected host hardware specs (GET/POST /device/detect). */
+export interface DeviceSpecsDetect {
   ram_gb: number;
-  gpu_available: boolean;
-  gpu_name?: string | null;
-  vram_gb?: number | null;
+  gpu_name: string | null;
+  vram_gb: number;
+  cpu_cores: number;
   storage_free_gb: number;
-  selected_model?: string;
+  os_name: string;
 }
 
-export interface DeviceSuggestions {
-  hardware_tier: string;
-  recommended_models: string[];
-  max_model_size_b: number;
-  warning_notes: string[];
-  is_hardware_supported: boolean;
-  is_gpu_recommended: boolean;
+/** Payload for POST /device. */
+export interface DeviceSpecsCreate {
+  onboarding_id: number;
+  ram_gb: number;
+  gpu_name?: string | null;
+  vram_gb?: number;
+  cpu_cores: number;
+  storage_free_gb: number;
+  os_name?: string;
+  selected_model?: string | null;
 }
 
-export interface ActiveModelStatus {
+export type ModelPullStatus = "completed" | "pulling" | "pending" | "not_pulled" | "offline" | "failed" | string;
+
+/** Saved device specs for an account (POST /device, GET /device/account/{id}, POST /device/select-model). */
+export interface DeviceSpecsRead {
+  id: number;
+  onboarding_id: number;
+  ram_gb: number;
+  gpu_name: string | null;
+  vram_gb: number;
+  cpu_cores: number;
+  storage_free_gb: number;
+  os_name: string;
+  selected_model: string;
+  pull_status: ModelPullStatus;
+  pull_percentage: number;
+  pull_status_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ModelOption {
+  model_name: string;
+  display_name: string;
+  size_gb: number;
+  min_ram_gb: number;
+  min_vram_gb: number;
+  tier: string;
+  is_recommended: boolean;
+  reason: string;
+}
+
+/** GET /device/suggestions */
+export interface ModelSuggestionsResponse {
+  recommended_model: string;
+  device_summary: string;
+  models: ModelOption[];
+}
+
+/** Payload for POST /device/select-model. */
+export interface ModelSelectPayload {
+  onboarding_id: number;
+  selected_model: string;
+  auto_pull?: boolean;
+}
+
+/** GET /device/active-model */
+export interface ActiveModelResponse {
+  onboarding_id: number | null;
   active_model: string;
+  pull_status: ModelPullStatus;
+  pull_percentage: number;
+  pull_status_message: string | null;
   is_ollama_online: boolean;
-  is_model_pulled: boolean;
+}
+
+/** GET /device/ollama/models */
+export interface OllamaModelsResponse {
+  is_online: boolean;
   installed_models: string[];
+  count: number;
 }
 
 export interface FlashcardItem {

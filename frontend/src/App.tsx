@@ -1,4 +1,15 @@
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { api, ApiError, describeApiError } from "./api/client";
+import { mapAgeRangeToNumber, mapAgeToRange } from "./api/mappers";
+import type {
+  ActiveModelResponse,
+  DeviceSpecsDetect,
+  DeviceSpecsRead,
+  ModelOption,
+  ModelSuggestionsResponse,
+  OllamaModelsResponse,
+  OnboardingProfile,
+} from "./api/types";
 
 type Page =
   | "home" | "tutor" | "planner" | "focus" | "lessons" | "ingest" | "generation"
@@ -18,15 +29,24 @@ type ProfileData = {
   modelPreference: string;
   learningTopic: string;
   learningSources: string[];
+  /** Backend onboarding profile ID (null until saved to the API). */
+  onboardingId: number | null;
+  /** Ollama model tag selected for this profile, e.g. "llama3.2:3b". */
+  modelTag: string;
+  /** Last hardware specs detected by the backend. */
+  deviceSpecs: DeviceSpecsDetect | null;
 };
 type IconName =
   | "home" | "spark" | "calendar" | "book" | "chart" | "settings" | "wifi"
   | "download" | "arrow" | "play" | "clock" | "check" | "mic" | "send"
   | "plus" | "pause" | "stop" | "search" | "file" | "cards" | "quiz"
   | "chevron" | "more" | "edit" | "offline" | "close" | "headphones"
-  | "upload" | "layers" | "image";
+  | "upload" | "layers" | "image" | "trash" | "cpu" | "logout";
 
 const paths: Record<IconName, ReactNode> = {
+  cpu: <><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9Z"/><path d="M9 1v3m6-3v3M9 20v3m6-3v3M20 9h3m-3 6h3M1 9h3m-3 6h3"/></>,
+  logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></>,
+  trash: <><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6m4-6v6"/></>,
   home: <><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10M9 20v-6h6v6"/></>,
   spark: <><path d="m12 3-1.4 4.1A5.3 5.3 0 0 1 7.1 10L3 11.5l4.1 1.4a5.3 5.3 0 0 1 3.5 3.5L12 21l1.4-4.6a5.3 5.3 0 0 1 3.5-3.5l4.1-1.4-4.1-1.5a5.3 5.3 0 0 1-3.5-2.9Z"/></>,
   calendar: <><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4m8-4v4M3 10h18m-13 4h3m2 0h3m-8 3h3"/></>,
@@ -67,11 +87,11 @@ function Calibrat8({ size = "medium", image }: { size?: "small" | "medium" | "la
   return <span className={`calibrat8-art calibrat8-${size}`} style={image ? { backgroundImage: `url("${image}")` } : undefined} role="img" aria-label="Calibrat8, a friendly robot learning companion"/>;
 }
 
-function Button({ children, onClick, variant = "primary", icon, type = "button", disabled = false, className = "" }: {
-  children: ReactNode; onClick?: () => void; variant?: "primary" | "secondary" | "ghost" | "soft";
-  icon?: IconName; type?: "button" | "submit"; disabled?: boolean; className?: string;
+function Button({ children, onClick, variant = "primary", icon, type = "button", disabled = false, className = "", id }: {
+  children: ReactNode; onClick?: (() => void) | (() => Promise<void>); variant?: "primary" | "secondary" | "ghost" | "soft";
+  icon?: IconName; type?: "button" | "submit"; disabled?: boolean; className?: string; id?: string;
 }) {
-  return <button type={type} disabled={disabled} onClick={onClick} className={`btn btn-${variant} ${className}`}>{icon && <Icon name={icon} size={18}/>}<span>{children}</span></button>;
+  return <button id={id} type={type} disabled={disabled} onClick={onClick} className={`btn btn-${variant} ${className}`}>{icon && <Icon name={icon} size={18}/>}<span>{children}</span></button>;
 }
 
 function Badge({ children, tone = "sage" }: { children: ReactNode; tone?: "sage" | "peach" | "blue" | "neutral" }) {
@@ -93,7 +113,55 @@ function isNavActive(item: Page, page: Page) {
   return item === "knowledge" && page === "coach";
 }
 
-function Sidebar({ page, setPage, online, setOnline, profile, editProfile }: { page: Page; setPage: (p: Page) => void; online: boolean; setOnline: (v: boolean) => void; profile: ProfileData; editProfile: () => void }) {
+function Sidebar({
+  page,
+  setPage,
+  online,
+  setOnline,
+  profile,
+  editProfile,
+  profiles,
+  activeProfileId,
+  onSelectProfile,
+  onLogout,
+  onAddProfile,
+}: {
+  page: Page;
+  setPage: (p: Page) => void;
+  online: boolean;
+  setOnline: (v: boolean) => void;
+  profile: ProfileData;
+  editProfile: () => void;
+  profiles: LearnerProfile[];
+  activeProfileId: string | null;
+  onSelectProfile: (id: string) => void;
+  onLogout: () => void;
+  onAddProfile: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [menuOpen]);
+
+  const initials = profile.name.split(" ").map(part => part[0]).join("").slice(0, 2).toUpperCase() || "LP";
+  const otherProfiles = profiles.filter(p => p.id !== activeProfileId);
+
   return <aside className="sidebar">
     <button className="brand" onClick={() => setPage("home")} aria-label="Calibrat8 home">
       <span className="brand-mark"><Icon name="spark" size={18}/></span>
@@ -105,12 +173,152 @@ function Sidebar({ page, setPage, online, setOnline, profile, editProfile }: { p
       </button>)}
     </nav>
     <div className="sidebar-bottom">
-      <button className={`connection ${online ? "" : "is-offline"}`} onClick={() => setOnline(!online)}>
+      <button className={`connection ${online ? "" : "is-offline"}`} onClick={() => setOnline(!online)} title={online ? "Simulate offline mode" : "Reconnect"}>
         <span className="status-dot"/><span><strong>{online ? "Online" : "Offline"}</strong><small>{online ? "AI tutor available" : "Saved materials ready"}</small></span>
+      </button>
+      <button
+        type="button"
+        className="sidebar-model-chip"
+        onClick={() => setPage("settings")}
+        title="View model and hardware setup in Settings"
+      >
+        <span className="model-chip-icon"><Icon name="cpu" size={15}/></span>
+        <div className="model-chip-body">
+          <strong>{profile.modelPreference || profile.modelTag || "Local AI"}</strong>
+          <small>{profile.deviceSpecs ? `${profile.deviceSpecs.ram_gb} GB · ${shortGpuName(profile.deviceSpecs)}` : (profile.deviceMemory || "Hardware setup")}</small>
+        </div>
+        <Icon name="chevron" size={13}/>
       </button>
       <button className="nav-item" onClick={() => setPage("settings")}><Icon name="settings"/><span>Settings & offline</span></button>
       <button className="nav-item compact-preferences" onClick={editProfile}><Icon name="edit"/><span>Edit learning profile</span></button>
-      <div className="profile"><div className="avatar">{profile.name.split(" ").map(part => part[0]).join("").slice(0, 2).toUpperCase()}</div><span><strong>{profile.name}</strong><small>{profile.level}</small></span><Icon name="more"/></div>
+
+      <div className="profile-widget" ref={menuRef}>
+        <button
+          type="button"
+          className={`profile-btn ${menuOpen ? "open" : ""}`}
+          onClick={() => setMenuOpen(prev => !prev)}
+          aria-expanded={menuOpen}
+          aria-haspopup="true"
+          aria-label={`Profile options for ${profile.name || "Learner"}`}
+        >
+          <div className="avatar">{initials}</div>
+          <div className="profile-btn-info">
+            <strong>{profile.name || "Learner"}</strong>
+            <small>{profile.level}{profile.onboardingId ? ` · ID #${profile.onboardingId}` : ""}</small>
+          </div>
+          <span className="profile-more-icon"><Icon name="more"/></span>
+        </button>
+
+        {menuOpen && (
+          <div className="profile-dropdown-menu" role="menu">
+            <div className="dropdown-user-card">
+              <div className="avatar large dropdown-avatar">{initials}</div>
+              <div className="dropdown-user-info">
+                <strong>{profile.name || "Learner"}</strong>
+                <small>{profile.level}{profile.onboardingId ? ` · Account #${profile.onboardingId}` : " · Local"}</small>
+                {profile.subjects.length > 0 && (
+                  <div className="dropdown-badges">
+                    {profile.subjects.slice(0, 3).map(s => <span key={s} className="mini-badge">{s}</span>)}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="dropdown-model-section">
+              <div className="dropdown-model-row">
+                <Icon name="cpu" size={14}/>
+                <span>Model: <strong>{profile.modelPreference || profile.modelTag || "Auto"}</strong></span>
+              </div>
+              {profile.modelTag && (
+                <div className="dropdown-model-tag">
+                  <small>Ollama tag: <code>{profile.modelTag}</code></small>
+                </div>
+              )}
+              {profile.deviceSpecs && (
+                <div className="dropdown-device-info">
+                  <small>{profile.deviceSpecs.ram_gb} GB RAM · {shortGpuName(profile.deviceSpecs)} · {profile.deviceSpecs.os_name}</small>
+                </div>
+              )}
+            </div>
+
+            {otherProfiles.length > 0 && (
+              <div className="dropdown-switch-section">
+                <p className="dropdown-section-title">SWITCH PROFILE</p>
+                <div className="dropdown-switch-list">
+                  {otherProfiles.map(p => {
+                    const otherInit = p.profile.name.split(" ").map(part => part[0]).join("").slice(0, 2).toUpperCase() || "LP";
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="switch-user-btn"
+                        onClick={() => {
+                          onSelectProfile(p.id);
+                          setMenuOpen(false);
+                        }}
+                      >
+                        <span className="avatar small">{otherInit}</span>
+                        <div className="switch-user-text">
+                          <strong>{p.profile.name || "Learner"}</strong>
+                          <small>{p.profile.level}</small>
+                        </div>
+                        <Icon name="arrow" size={12}/>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="dropdown-actions">
+              <button
+                type="button"
+                className="dropdown-action-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onAddProfile();
+                }}
+              >
+                <Icon name="plus" size={16}/>
+                <span>Add another user</span>
+              </button>
+              <button
+                type="button"
+                className="dropdown-action-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  editProfile();
+                }}
+              >
+                <Icon name="edit" size={16}/>
+                <span>Edit learning profile</span>
+              </button>
+              <button
+                type="button"
+                className="dropdown-action-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setPage("settings");
+                }}
+              >
+                <Icon name="settings" size={16}/>
+                <span>Model & Device settings</span>
+              </button>
+              <button
+                type="button"
+                className="dropdown-action-item logout-action"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onLogout();
+                }}
+              >
+                <Icon name="logout" size={16}/>
+                <span>Log out & Switch profile</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   </aside>;
 }
@@ -585,8 +793,8 @@ function ComparisonReport({ attempts, takeQuiz }: { attempts: Attempt[]; takeQui
   </div>;
 }
 
-function Settings({ online, setOnline, editProfile, profile }: { online: boolean; setOnline: (online: boolean) => void; editProfile: () => void; profile: ProfileData }) {
-  return <div className="page settings-page"><section className="workflow-hero"><div><Badge tone="neutral">SETTINGS & OFFLINE STATUS</Badge><h2>Clear controls, honest capability states.</h2><p>Manage your learning profile and simulate connectivity for prototype testing.</p></div></section><div className="settings-grid"><section className="panel setting-card"><span className={`setting-icon ${online ? "" : "muted"}`}><Icon name={online ? "wifi" : "offline"}/></span><div><h3>{online ? "You’re online" : "You’re offline"}</h3><p>{online ? "Connected prototype features are available. No real AI model is connected." : "Saved notes, cards, quizzes, and results remain available. New generation is unavailable."}</p></div><Button variant={online ? "secondary" : "primary"} onClick={() => setOnline(!online)} icon={online ? "offline" : "wifi"}>{online ? "Simulate offline" : "Reconnect"}</Button></section><section className="panel setting-card"><span className="setting-icon"><Icon name="download"/></span><div><h3>Offline library</h3><p>Cell division notes, flashcards, quiz, and saved results are available in this browser session.</p></div><Badge>Ready</Badge></section><section className="panel setting-card"><span className="setting-icon"><Icon name="spark"/></span><div><h3>Local AI device profile</h3><p>{profile.deviceType} · {profile.deviceMemory} RAM · {profile.modelPreference} preference. No model is installed or tested by this prototype.</p></div><Badge tone="neutral">Recommendation saved</Badge></section><section className="panel setting-card"><span className="setting-icon"><Icon name="edit"/></span><div><h3>Learning profile</h3><p>Update subjects, study routine, learning style, device fit, and personalization preferences.</p></div><Button variant="secondary" onClick={editProfile}>Edit profile</Button></section></div></div>;
+function Settings({ online, setOnline, editProfile, profile, onModelChange, onDeleteProfile }: { online: boolean; setOnline: (online: boolean) => void; editProfile: () => void; profile: ProfileData; onModelChange: (tag: string, label: string, specs?: DeviceSpecsDetect | null) => void; onDeleteProfile?: () => void }) {
+  return <div className="page settings-page"><section className="workflow-hero"><div><Badge tone="neutral">SETTINGS & OFFLINE STATUS</Badge><h2>Clear controls, honest capability states.</h2><p>Manage your learning profile and simulate connectivity for prototype testing.</p></div></section><div className="settings-grid"><section className="panel setting-card"><span className={`setting-icon ${online ? "" : "muted"}`}><Icon name={online ? "wifi" : "offline"}/></span><div><h3>{online ? "You’re online" : "You’re offline"}</h3><p>{online ? "Connected features are available. Local AI runs on this device through Ollama." : "Saved notes, cards, quizzes, and results remain available. New generation is unavailable."}</p></div><Button variant={online ? "secondary" : "primary"} onClick={() => setOnline(!online)} icon={online ? "offline" : "wifi"}>{online ? "Simulate offline" : "Reconnect"}</Button></section><section className="panel setting-card"><span className="setting-icon"><Icon name="download"/></span><div><h3>Offline library</h3><p>Cell division notes, flashcards, quiz, and saved results are available in this browser session.</p></div><Badge>Ready</Badge></section><LocalModelCard profile={profile} onModelChange={onModelChange}/><section className="panel setting-card"><span className="setting-icon"><Icon name="edit"/></span><div><h3>Learning profile</h3><p>Update subjects, study routine, learning style, device fit, and personalization preferences.</p></div><Button variant="secondary" onClick={editProfile}>Edit profile</Button></section>{onDeleteProfile && <section className="panel setting-card danger-card"><span className="setting-icon danger"><Icon name="trash"/></span><div><h3>Delete profile</h3><p>Permanently remove “{profile.name || "this learner"}” and all associated data from the database.</p></div><button type="button" className="btn-danger-soft" onClick={onDeleteProfile}><Icon name="trash" size={16}/><span>Delete profile</span></button></section>}</div></div>;
 }
 
 function Lessons({ online, addMaterial }: { online: boolean; addMaterial: () => void }) {
@@ -637,9 +845,9 @@ function Coach({ back }: { back: () => void }) {
 }
 
 const defaultProfile: ProfileData = {
-  name: "Amara Mensah",
-  level: "Senior high school",
-  subjects: ["Mathematics", "Biology", "History"],
+  name: "",
+  level: "13–17",
+  subjects: [],
   examDate: "",
   dailyMinutes: "60",
   studyTime: "After school",
@@ -650,16 +858,13 @@ const defaultProfile: ProfileData = {
   modelPreference: "Balanced",
   learningTopic: "",
   learningSources: [],
+  onboardingId: null,
+  modelTag: "",
+  deviceSpecs: null,
 };
 
 const emptyProfile: ProfileData = {
   ...defaultProfile,
-  name: "",
-  level: "13–17",
-  subjects: [],
-  modelPreference: "",
-  learningTopic: "",
-  learningSources: [],
 };
 
 function normalizeProfile(parsed: Partial<ProfileData>): ProfileData {
@@ -668,6 +873,9 @@ function normalizeProfile(parsed: Partial<ProfileData>): ProfileData {
     ...parsed,
     learningTopic: typeof parsed.learningTopic === "string" ? parsed.learningTopic : "",
     learningSources: Array.isArray(parsed.learningSources) ? parsed.learningSources : [],
+    onboardingId: typeof parsed.onboardingId === "number" ? parsed.onboardingId : null,
+    modelTag: typeof parsed.modelTag === "string" ? parsed.modelTag : "",
+    deviceSpecs: parsed.deviceSpecs && typeof parsed.deviceSpecs === "object" ? parsed.deviceSpecs : null,
   };
 }
 
@@ -701,19 +909,21 @@ function readSavedProfiles(): LearnerProfile[] {
     const saved = localStorage.getItem("calibrat8-profiles");
     if (saved) {
       const parsed = JSON.parse(saved) as Partial<LearnerProfile>[];
-      return parsed.filter(item => item.id && item.profile).map(item => ({
-        id: item.id as string,
-        profile: normalizeProfile(item.profile as Partial<ProfileData>),
-        attempts: Array.isArray(item.attempts) ? item.attempts as Attempt[] : [],
-        createdAt: item.createdAt || new Date().toISOString(),
-        updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
-      }));
+      return parsed
+        .filter(item => item.id && item.profile && item.profile.name && item.profile.name.trim() !== "Amara Mensah")
+        .map(item => ({
+          id: item.id as string,
+          profile: normalizeProfile(item.profile as Partial<ProfileData>),
+          attempts: Array.isArray(item.attempts) ? (item.attempts as Attempt[]) : [],
+          createdAt: item.createdAt || new Date().toISOString(),
+          updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
+        }));
     }
   } catch {
     // Fall through to the legacy single-profile migration.
   }
   const legacyProfile = readLegacyProfile();
-  if (!legacyProfile) return [];
+  if (!legacyProfile || !legacyProfile.name || legacyProfile.name.trim() === "Amara Mensah") return [];
   const timestamp = new Date().toISOString();
   return [{ id: "legacy-profile", profile: legacyProfile, attempts: readSavedAttempts(), createdAt: timestamp, updatedAt: timestamp }];
 }
@@ -742,6 +952,8 @@ function persistProfiles(profiles: LearnerProfile[], activeProfileId: string | n
     }
   } else {
     localStorage.removeItem("calibrat8-active-profile");
+    localStorage.removeItem("lumi-profile");
+    localStorage.removeItem("lumi-attempts");
   }
 }
 
@@ -755,22 +967,342 @@ function readSavedPage(): Page {
   }
 }
 
-function ProfileSetup({ initial, editing, returning, profiles, activeProfileId, onComplete, onCancel, onResume, onSelectProfile }: {
+const PRESET_INTERESTS = ["Science & nature", "Math & logic", "History & culture", "Languages", "Technology", "Arts & creativity"];
+
+function isModelInstalled(tag: string, installed: string[] | undefined) {
+  if (!installed) return false;
+  return installed.includes(tag) || installed.includes(`${tag}:latest`);
+}
+
+function modelLabel(tag: string, options?: ModelOption[] | null) {
+  return options?.find(option => option.model_name === tag)?.display_name || tag;
+}
+
+function deviceSpecsFromRecord(device: DeviceSpecsRead): DeviceSpecsDetect {
+  return {
+    ram_gb: device.ram_gb,
+    gpu_name: device.gpu_name,
+    vram_gb: device.vram_gb,
+    cpu_cores: device.cpu_cores,
+    storage_free_gb: device.storage_free_gb,
+    os_name: device.os_name,
+  };
+}
+
+function deviceSummaryLine(device: DeviceSpecsDetect) {
+  const vram = device.vram_gb > 0 ? ` · ${device.vram_gb} GB VRAM` : "";
+  return `${device.ram_gb} GB RAM · ${device.gpu_name || "Integrated graphics"}${vram} · ${device.cpu_cores} CPU cores · ${device.storage_free_gb} GB free · ${device.os_name}.`;
+}
+
+function gpuVendor(device: DeviceSpecsDetect) {
+  const name = device.gpu_name || "";
+  if (/apple|metal/i.test(name)) return "Apple Silicon";
+  if (/nvidia|geforce|rtx|gtx/i.test(name)) return "NVIDIA";
+  if (/amd|radeon/i.test(name)) return "AMD";
+  if (/intel/i.test(name)) return "Intel";
+  return "Integrated";
+}
+
+function shortGpuName(device: DeviceSpecsDetect) {
+  const name = device.gpu_name || "GPU";
+  if (/apple/i.test(name)) {
+    return name.replace(/\(Metal GPU\)/i, "").trim() || "Apple M-Series";
+  }
+  return name.replace(/^(NVIDIA|AMD|Intel)\s+(GeForce\s+|Radeon\s+)?/i, "").trim() || "GPU";
+}
+
+function pullStatusLabel(status?: string | null) {
+  switch (status) {
+    case "completed": return "Installed";
+    case "pulling": return "Downloading";
+    case "pending": return "Pending";
+    case "offline": return "Ollama offline";
+    case "failed": return "Download failed";
+    case "not_pulled": return "Not installed";
+    default: return "Checking…";
+  }
+}
+
+/** Copy saved device specs + model selection from the backend into a local profile. */
+function applyDeviceRecord(profile: ProfileData, device: DeviceSpecsRead): ProfileData {
+  const specs = deviceSpecsFromRecord(device);
+  const modelChanged = profile.modelTag !== device.selected_model;
+  return {
+    ...profile,
+    deviceSpecs: specs,
+    deviceType: specs.os_name,
+    deviceMemory: `${specs.ram_gb} GB`,
+    modelTag: device.selected_model,
+    modelPreference: modelChanged || !profile.modelPreference ? device.selected_model : profile.modelPreference,
+  };
+}
+
+/** The backend is the source of truth for name, age and interests. */
+function applyRemoteProfile(profile: ProfileData, remote: OnboardingProfile, device?: DeviceSpecsRead | null): ProfileData {
+  const level = profile.level && mapAgeRangeToNumber(profile.level) === remote.age ? profile.level : mapAgeToRange(remote.age);
+  const next: ProfileData = {
+    ...profile,
+    onboardingId: remote.id,
+    name: remote.username,
+    level,
+    subjects: remote.interests.length ? remote.interests : profile.subjects,
+  };
+  return device ? applyDeviceRecord(next, device) : next;
+}
+
+/** Merge backend onboarding profiles into the locally cached learner profiles.
+ * The backend database is the single source of truth: only profiles that exist in the database are retained. */
+function mergeRemoteProfiles(local: LearnerProfile[], remote: OnboardingProfile[]): LearnerProfile[] {
+  const remoteById = new Map<number, OnboardingProfile>();
+  const remoteByUsername = new Map<string, OnboardingProfile>();
+  remote.forEach(entry => {
+    remoteById.set(entry.id, entry);
+    remoteByUsername.set(entry.username.trim().toLowerCase(), entry);
+  });
+
+  const claimedRemoteIds = new Set<number>();
+  const merged: LearnerProfile[] = [];
+
+  for (const item of local) {
+    const { onboardingId, name } = item.profile;
+    let match: OnboardingProfile | undefined;
+    if (onboardingId != null && remoteById.has(onboardingId)) {
+      match = remoteById.get(onboardingId);
+    } else if (name && remoteByUsername.has(name.trim().toLowerCase())) {
+      const candidate = remoteByUsername.get(name.trim().toLowerCase());
+      if (candidate && !claimedRemoteIds.has(candidate.id)) {
+        match = candidate;
+      }
+    }
+    if (match && !claimedRemoteIds.has(match.id)) {
+      claimedRemoteIds.add(match.id);
+      merged.push({
+        ...item,
+        id: item.id.startsWith("server-") ? item.id : `server-${match.id}`,
+        profile: applyRemoteProfile(item.profile, match),
+      });
+    }
+  }
+
+  remote.forEach(entry => {
+    if (claimedRemoteIds.has(entry.id)) return;
+    claimedRemoteIds.add(entry.id);
+    merged.push({
+      id: `server-${entry.id}`,
+      profile: applyRemoteProfile({ ...emptyProfile, name: entry.username, learningStyle: "Learn" }, entry),
+      attempts: [],
+      createdAt: entry.created_at,
+      updatedAt: entry.updated_at || entry.created_at,
+    });
+  });
+
+  return merged;
+}
+
+/** Poll the backend for the active local model and its download progress. */
+function useActiveModelPolling(onboardingId: number | null, enabled: boolean, refreshKey: number) {
+  const [status, setStatus] = useState<ActiveModelResponse | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    let attempts = 0;
+    const poll = async () => {
+      attempts += 1;
+      try {
+        const next = await api.getActiveModel(onboardingId);
+        if (cancelled) return;
+        setStatus(next);
+        setError("");
+        const inProgress = next.pull_status === "pulling" || next.pull_status === "pending";
+        // Right after saving, the background pull may not have registered yet, so re-check briefly.
+        const warmingUp = next.pull_status === "not_pulled" && next.is_ollama_online && attempts < 5;
+        if (inProgress || warmingUp) timer = window.setTimeout(poll, 2500);
+      } catch (err) {
+        if (cancelled) return;
+        setError(describeApiError(err));
+        if (attempts < 5) timer = window.setTimeout(poll, 5000);
+      }
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [onboardingId, enabled, refreshKey]);
+  return { status, error };
+}
+
+function ModelStatus({ status, error }: { status: ActiveModelResponse | null; error: string }) {
+  if (!status) return <p className={error ? "api-error" : "model-status"}>{error || "Checking local AI status…"}</p>;
+  const pct = Math.round(status.pull_percentage);
+  return <div className="model-status" aria-live="polite">
+    <span><strong>Active: {status.active_model}</strong> · {status.is_ollama_online ? "Ollama online" : "Ollama offline"} · {pullStatusLabel(status.pull_status)}{status.pull_status === "pulling" ? ` ${pct}%` : ""}</span>
+    {status.pull_status === "pulling" && <span className="model-progress"><span style={{ width: `${pct}%` }}/></span>}
+  </div>;
+}
+
+function LocalAiNote({ status, error, modelTag }: { status: ActiveModelResponse | null; error: string; modelTag: string }) {
+  const model = status?.active_model || modelTag || "Your model";
+  const pct = Math.round(status?.pull_percentage ?? 0);
+  let icon: IconName = "spark";
+  let title = "Checking local AI status…";
+  let detail = "Calibrat8 is asking the local backend which model is active.";
+  if (!status && error) {
+    icon = "offline";
+    title = "Couldn’t check local AI status.";
+    detail = `${error} Saved lessons, flashcards, and quizzes still work offline.`;
+  } else if (status) {
+    if (!status.is_ollama_online || status.pull_status === "offline") {
+      icon = "offline";
+      title = "Ollama isn’t running on this device yet.";
+      detail = `${model} is saved as your model. Start Ollama to enable local AI generation. Saved materials still work offline.`;
+    } else if (status.pull_status === "completed") {
+      icon = "check";
+      title = `${model} is installed and ready.`;
+      detail = "Notes, flashcards, quizzes, and tutoring can be generated fully offline on this device.";
+    } else if (status.pull_status === "pulling") {
+      icon = "download";
+      title = `Downloading ${model}… ${pct}%`;
+      detail = "You can finish setup now. The download keeps running in the background.";
+    } else if (status.pull_status === "failed") {
+      icon = "close";
+      title = `Couldn’t download ${model}.`;
+      detail = `${status.pull_status_message || "The download failed."} You can choose another model later in Settings.`;
+    } else {
+      icon = "download";
+      title = `${model} will download in the background.`;
+      detail = "Saved lessons, plans, flashcards, and quizzes work offline while the model is prepared.";
+    }
+  }
+  return <div className={`local-ai-note model-note is-${status?.pull_status || "checking"}`} aria-live="polite"><Icon name={icon}/><p><strong>{title}</strong><br/>{detail}{status?.pull_status === "pulling" && <span className="model-progress"><span style={{ width: `${pct}%` }}/></span>}</p></div>;
+}
+
+function LocalModelCard({ profile, onModelChange }: { profile: ProfileData; onModelChange: (tag: string, label: string, specs?: DeviceSpecsDetect | null) => void }) {
+  const onboardingId = profile.onboardingId;
+  const [device, setDevice] = useState<DeviceSpecsRead | null>(null);
+  const [suggestions, setSuggestions] = useState<ModelSuggestionsResponse | null>(null);
+  const [ollamaInfo, setOllamaInfo] = useState<OllamaModelsResponse | null>(null);
+  const [choice, setChoice] = useState(profile.modelTag);
+  const [loading, setLoading] = useState(true);
+  const [switching, setSwitching] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [statusKey, setStatusKey] = useState(0);
+  const { status, error: statusError } = useActiveModelPolling(onboardingId, true, statusKey);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    Promise.all([
+      onboardingId != null ? api.getDeviceByAccount(onboardingId) : Promise.resolve(null),
+      api.getDeviceSuggestions(onboardingId != null ? { onboarding_id: onboardingId } : {}),
+      api.listOllamaModels().catch(() => null),
+    ]).then(([savedDevice, nextSuggestions, ollama]) => {
+      if (cancelled) return;
+      setDevice(savedDevice);
+      setSuggestions(nextSuggestions);
+      setOllamaInfo(ollama);
+      setChoice(savedDevice?.selected_model || profile.modelTag || nextSuggestions.recommended_model);
+    }).catch(err => {
+      if (!cancelled) setError(describeApiError(err));
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [onboardingId]);
+
+  const switchModel = async () => {
+    if (onboardingId == null || !choice) return;
+    setSwitching(true);
+    setError("");
+    setMessage("");
+    try {
+      let saved: DeviceSpecsRead;
+      let specs: DeviceSpecsDetect | null = null;
+      if (device) {
+        saved = await api.selectModel({ onboarding_id: onboardingId, selected_model: choice });
+      } else {
+        specs = profile.deviceSpecs || await api.detectDevice();
+        saved = await api.saveDeviceSpecs({ onboarding_id: onboardingId, ...specs, selected_model: choice });
+      }
+      const label = modelLabel(saved.selected_model, suggestions?.models);
+      setDevice(saved);
+      onModelChange(saved.selected_model, label, specs || deviceSpecsFromRecord(saved));
+      setMessage(`Switched to ${label}. Calibrat8 will use it for AI generation.`);
+      setStatusKey(key => key + 1);
+    } catch (err) {
+      setError(describeApiError(err));
+    } finally {
+      setSwitching(false);
+    }
+  };
+
+  const models = suggestions?.models || [];
+  const choiceMissing = Boolean(choice) && !models.some(option => option.model_name === choice);
+  const badgeTone = status?.pull_status === "completed" ? "sage" : status?.pull_status === "pulling" ? "blue" : "neutral";
+  const description = onboardingId == null
+    ? "Finish onboarding to save a local AI model for this profile."
+    : device
+      ? deviceSummaryLine(deviceSpecsFromRecord(device))
+      : loading
+        ? "Loading your saved device profile…"
+        : "No device profile saved yet. Choosing a model will detect this device and save it.";
+
+  return <section className="panel setting-card model-setting-card" id="settings-local-model">
+    <span className="setting-icon"><Icon name="spark"/></span>
+    <div>
+      <h3>Local AI model</h3>
+      <p>{description}</p>
+      <div className="model-switcher">
+        <select id="settings-model-select" aria-label="Choose local AI model" value={choice} onChange={e => { setChoice(e.target.value); setMessage(""); }} disabled={loading || switching || !models.length}>
+          {!models.length && <option value={choice}>{loading ? "Loading models…" : choice || "No models available"}</option>}
+          {models.map(option => <option key={option.model_name} value={option.model_name}>
+            {option.display_name} · {option.size_gb} GB{option.model_name === suggestions?.recommended_model ? " · Recommended" : ""}{isModelInstalled(option.model_name, ollamaInfo?.installed_models) ? " · Installed" : ""}
+          </option>)}
+          {models.length > 0 && choiceMissing && <option value={choice}>{choice}</option>}
+        </select>
+        <Button id="settings-model-switch" variant="secondary" icon="layers" onClick={switchModel} disabled={onboardingId == null || !choice || loading || switching || choice === device?.selected_model}>{switching ? "Switching…" : "Use this model"}</Button>
+      </div>
+      <ModelStatus status={status} error={statusError}/>
+      {message && <p className="api-success" role="status">{message}</p>}
+      {error && <p className="api-error" role="alert">{error}</p>}
+    </div>
+    <Badge tone={badgeTone}>{pullStatusLabel(status?.pull_status)}</Badge>
+  </section>;
+}
+
+function ProfileSetup({ initial, editing, returning, startInNew = false, profiles, activeProfileId, onComplete, onCancel, onResume, onSelectProfile, onDeleteProfile }: {
   initial: ProfileData;
   editing: boolean;
   returning: boolean;
+  startInNew?: boolean;
   profiles: LearnerProfile[];
   activeProfileId: string | null;
   onComplete: (profile: ProfileData, createNew: boolean) => void;
   onCancel: () => void;
   onResume: () => void;
   onSelectProfile: (id: string) => void;
+  onDeleteProfile: (id: string) => Promise<void>;
 }) {
-  const [step, setStep] = useState(editing ? 1 : 0);
-  const [profile, setProfile] = useState(initial);
-  const [creatingNew, setCreatingNew] = useState(false);
+  const [step, setStep] = useState(editing || startInNew ? 1 : 0);
+  const [profile, setProfile] = useState(startInNew ? emptyProfile : initial);
+  const [creatingNew, setCreatingNew] = useState(startInNew);
+  const [deletingTarget, setDeletingTarget] = useState<LearnerProfile | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [analysisStage, setAnalysisStage] = useState(0);
-  const [detectedCores, setDetectedCores] = useState<number | null>(null);
+  const [analysisAttempt, setAnalysisAttempt] = useState(0);
+  const [analysisError, setAnalysisError] = useState("");
+  const [detected, setDetected] = useState<DeviceSpecsDetect | null>(initial.deviceSpecs);
+  const [suggestions, setSuggestions] = useState<ModelSuggestionsResponse | null>(null);
+  const [ollamaInfo, setOllamaInfo] = useState<OllamaModelsResponse | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [apiError, setApiError] = useState("");
+  const [modelStatusKey, setModelStatusKey] = useState(0);
+  const { status: modelStatus, error: modelStatusError } = useActiveModelPolling(profile.onboardingId, step === 4, modelStatusKey);
   const [topicMethod, setTopicMethod] = useState<"text" | "voice" | "camera" | "files">("text");
   const [topicFiles, setTopicFiles] = useState<IngestedFile[]>(() => (initial.learningSources || []).map(name => ({ name, size: "Saved source", type: name.split(".").pop()?.toUpperCase() || "FILE" })));
   const [isRecording, setIsRecording] = useState(false);
@@ -784,6 +1316,30 @@ function ProfileSetup({ initial, editing, returning, profiles, activeProfileId, 
     setProfile(savedProfile.profile);
     setTopicFiles((savedProfile.profile.learningSources || []).map(name => ({ name, size: "Saved source", type: name.split(".").pop()?.toUpperCase() || "FILE" })));
     setCreatingNew(false);
+  };
+  const confirmDelete = async () => {
+    if (!deletingTarget) return;
+    setIsDeleting(true);
+    setDeleteError("");
+    try {
+      const targetId = deletingTarget.id;
+      await onDeleteProfile(targetId);
+      setDeletingTarget(null);
+      if (targetId === activeProfileId) {
+        const remaining = profiles.filter(p => p.id !== targetId);
+        if (remaining.length > 0) {
+          setProfile(remaining[0].profile);
+          setTopicFiles((remaining[0].profile.learningSources || []).map(name => ({ name, size: "Saved source", type: name.split(".").pop()?.toUpperCase() || "FILE" })));
+        } else {
+          setProfile(emptyProfile);
+          setTopicFiles([]);
+        }
+      }
+    } catch (err) {
+      setDeleteError(describeApiError(err));
+    } finally {
+      setIsDeleting(false);
+    }
   };
   const beginNewProfile = () => {
     setProfile(emptyProfile);
@@ -799,37 +1355,132 @@ function ProfileSetup({ initial, editing, returning, profiles, activeProfileId, 
     }
     setStep(0);
   };
-  const memoryAmount = Number.parseInt(profile.deviceMemory, 10);
-  const isMobileDevice = profile.deviceType === "Phone" || profile.deviceType === "Tablet";
-  const modelFit = isMobileDevice
-    ? memoryAmount >= 8
-      ? { tier: "3B–4B mobile-friendly model", detail: "This is a practical upper range for a modern mobile device. Close other apps during local processing.", tone: "blue" as const }
-      : { tier: "1B–2B compact model", detail: "A compact model is the safer mobile choice for lower memory use, heat, and battery impact.", tone: "peach" as const }
-    : memoryAmount >= 16 && (detectedCores || 0) >= 8
-      ? { tier: "7B–8B quantized model", detail: "A balanced local model should fit comfortably for study tasks while leaving room for other apps.", tone: "sage" as const }
-      : memoryAmount >= 8 || (!Number.isFinite(memoryAmount) && (detectedCores || 0) >= 6)
-        ? { tier: "3B–4B quantized model", detail: "A smaller local model is the safer default for responsive tutoring and summaries.", tone: "blue" as const }
-        : { tier: "1B–2B compact model", detail: "Use a compact model to reduce memory pressure and avoid slowdowns. Larger models should use a connected service.", tone: "peach" as const };
+  useEffect(() => {
+    setApiError("");
+  }, [step]);
+  useEffect(() => {
+    // Keep the welcome screen in sync when the parent refreshes profiles from the backend.
+    if (step !== 0 || creatingNew) return;
+    setProfile(initial);
+    setTopicFiles((initial.learningSources || []).map(name => ({ name, size: "Saved source", type: name.split(".").pop()?.toUpperCase() || "FILE" })));
+  }, [initial]);
+  const saveAccountAndAnalyze = async () => {
+    const payload = { username: profile.name.trim(), age: mapAgeRangeToNumber(profile.level), interests: profile.subjects };
+    setSaving(true);
+    setApiError("");
+    try {
+      let saved: OnboardingProfile | null = null;
+      if (profile.onboardingId != null) {
+        try {
+          saved = await api.updateOnboarding(profile.onboardingId, payload);
+        } catch (err) {
+          // The server record may have been removed (e.g. database reset); fall back to creating it.
+          if (!(err instanceof ApiError && err.status === 404)) throw err;
+        }
+      }
+      if (!saved) {
+        try {
+          saved = await api.createOnboarding(payload);
+        } catch (err) {
+          if (!(err instanceof ApiError && err.status === 409)) throw err;
+          if (creatingNew) throw new ApiError(`A profile named “${payload.username}” already exists. Choose it on the welcome screen or use a different name.`, 409);
+          // Link this locally saved profile to its existing backend record.
+          const existing = await api.getOnboardingByUser(payload.username);
+          if (!existing) throw err;
+          saved = await api.updateOnboarding(existing.id, payload);
+        }
+      }
+      if (!saved) throw new Error("Unable to save your profile. Please try again.");
+      const result = saved;
+      setProfile(current => ({ ...current, onboardingId: result.id, name: result.username, subjects: result.interests }));
+      setStep(2);
+    } catch (err) {
+      setApiError(describeApiError(err));
+    } finally {
+      setSaving(false);
+    }
+  };
   useEffect(() => {
     if (step !== 2) return;
+    let cancelled = false;
+    const startedAt = Date.now();
     setAnalysisStage(0);
-    setDetectedCores(16);
+    setAnalysisError("");
     const timers = [
-      window.setTimeout(() => setAnalysisStage(1), 350),
-      window.setTimeout(() => setAnalysisStage(2), 950),
-      window.setTimeout(() => {
-        setProfile(current => ({
-          ...current,
-          deviceType: "Windows 11 desktop",
-          deviceMemory: "15.9 GB",
-          modelPreference: "",
-        }));
-        setAnalysisStage(3);
-      }, 1550),
-      window.setTimeout(() => setAnalysisStage(4), 2250),
+      window.setTimeout(() => setAnalysisStage(stage => Math.max(stage, 1)), 350),
+      window.setTimeout(() => setAnalysisStage(stage => Math.max(stage, 2)), 950),
     ];
-    return () => timers.forEach(timer => window.clearTimeout(timer));
-  }, [step]);
+    const runAnalysis = async () => {
+      try {
+        const specs = await api.detectDevice();
+        if (cancelled) return;
+        setDetected(specs);
+        setAnalysisStage(stage => Math.max(stage, 3));
+        const [nextSuggestions, ollama] = await Promise.all([
+          api.getDeviceSuggestions({ ram_gb: specs.ram_gb, vram_gb: specs.vram_gb, gpu_name: specs.gpu_name }),
+          api.listOllamaModels().catch(() => null),
+        ]);
+        if (cancelled) return;
+        setSuggestions(nextSuggestions);
+        setOllamaInfo(ollama);
+        setProfile(current => {
+          const keepCurrent = Boolean(current.modelTag) && nextSuggestions.models.some(option => option.model_name === current.modelTag);
+          const tag = keepCurrent ? current.modelTag : nextSuggestions.recommended_model;
+          return {
+            ...current,
+            deviceSpecs: specs,
+            deviceType: specs.os_name,
+            deviceMemory: `${specs.ram_gb} GB`,
+            modelTag: tag,
+            modelPreference: modelLabel(tag, nextSuggestions.models),
+          };
+        });
+        // Keep the step-by-step animation readable even when the backend answers instantly.
+        const remaining = Math.max(0, 2200 - (Date.now() - startedAt));
+        timers.push(window.setTimeout(() => setAnalysisStage(4), remaining));
+      } catch (err) {
+        if (!cancelled) setAnalysisError(describeApiError(err));
+      }
+    };
+    void runAnalysis();
+    return () => {
+      cancelled = true;
+      timers.forEach(timer => window.clearTimeout(timer));
+    };
+  }, [step, analysisAttempt]);
+  const analysisReady = analysisStage >= 4 && !analysisError;
+  const sortedModels = suggestions
+    ? [...suggestions.models].sort((a, b) => {
+      const rank = (option: ModelOption) => option.model_name === suggestions.recommended_model ? 0 : option.is_recommended ? 1 : 2;
+      return rank(a) - rank(b);
+    })
+    : [];
+  const recommendedCount = suggestions?.models.filter(option => option.is_recommended).length || 0;
+  const selectModelOption = (option: ModelOption) => setProfile(current => ({ ...current, modelTag: option.model_name, modelPreference: option.display_name }));
+  const saveDeviceAndContinue = async () => {
+    if (profile.onboardingId == null || !detected || !profile.modelTag) return;
+    setSaving(true);
+    setApiError("");
+    try {
+      const saved = await api.saveDeviceSpecs({
+        onboarding_id: profile.onboardingId,
+        ram_gb: Math.max(0.5, detected.ram_gb),
+        gpu_name: detected.gpu_name,
+        vram_gb: Math.max(0, detected.vram_gb),
+        cpu_cores: Math.max(1, detected.cpu_cores),
+        storage_free_gb: Math.max(0, detected.storage_free_gb),
+        os_name: detected.os_name,
+        selected_model: profile.modelTag,
+      });
+      setProfile(current => ({ ...current, modelTag: saved.selected_model, modelPreference: modelLabel(saved.selected_model, suggestions?.models) }));
+      setModelStatusKey(key => key + 1);
+      setStep(3);
+    } catch (err) {
+      setApiError(describeApiError(err));
+    } finally {
+      setSaving(false);
+    }
+  };
   useEffect(() => {
     if (!isRecording) return;
     const timer = window.setInterval(() => setRecordingSeconds(seconds => seconds + 1), 1000);
@@ -923,12 +1574,32 @@ function ProfileSetup({ initial, editing, returning, profiles, activeProfileId, 
         <div>{profiles.map(savedProfile => {
           const initials = savedProfile.profile.name.split(" ").map(part => part[0]).join("").slice(0, 2).toUpperCase();
           const selected = savedProfile.id === activeProfileId;
-          return <button key={savedProfile.id} className={selected ? "selected" : ""} aria-pressed={selected} onClick={() => selectSavedProfile(savedProfile)}>
-            <span>{initials || "LP"}</span>
-            <strong>{savedProfile.profile.name || "Learner"}</strong>
-            <small>{savedProfile.profile.level} · {savedProfile.attempts.length} {savedProfile.attempts.length === 1 ? "activity" : "activities"}</small>
-            {selected && <i><Icon name="check" size={13}/></i>}
-          </button>;
+          return <div key={savedProfile.id} className={`profile-picker-item ${selected ? "selected" : ""}`}>
+            <button
+              type="button"
+              className={`profile-card-button ${selected ? "selected" : ""}`}
+              aria-pressed={selected}
+              onClick={() => selectSavedProfile(savedProfile)}
+            >
+              <span>{initials || "LP"}</span>
+              <strong>{savedProfile.profile.name || "Learner"}</strong>
+              <small>{savedProfile.profile.level} · {savedProfile.attempts.length} {savedProfile.attempts.length === 1 ? "activity" : "activities"}</small>
+              {selected && <i><Icon name="check" size={13}/></i>}
+            </button>
+            <button
+              type="button"
+              className="profile-delete-btn"
+              title={`Delete profile ${savedProfile.profile.name || "Learner"}`}
+              aria-label={`Delete profile ${savedProfile.profile.name || "Learner"}`}
+              onClick={e => {
+                e.stopPropagation();
+                setDeleteError("");
+                setDeletingTarget(savedProfile);
+              }}
+            >
+              <Icon name="trash" size={13}/>
+            </button>
+          </div>;
         })}
           <button className="add-profile-card" onClick={beginNewProfile} aria-label="Add another learner profile">
             <span><Icon name="plus" size={19}/></span>
@@ -942,9 +1613,24 @@ function ProfileSetup({ initial, editing, returning, profiles, activeProfileId, 
         <Button onClick={onResume} icon="play">Resume my learning</Button>
         <Button variant="secondary" onClick={() => { setCreatingNew(false); setStep(1); }} icon="edit">Review personalization</Button>
       </div> : <>
-      <Button onClick={() => setStep(1)} icon="arrow">Set up my learning space</Button>
-        <button className="setup-skip" onClick={() => onComplete(defaultProfile, true)}>Explore with a sample profile</button>
+        <Button onClick={() => setStep(1)} icon="arrow">Set up my learning space</Button>
       </>}
+      {deletingTarget && (
+        <div className="modal-backdrop" onMouseDown={() => !isDeleting && setDeletingTarget(null)}>
+          <div className="delete-profile-modal" onMouseDown={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="delete-profile-title">
+            <div className="delete-modal-icon"><Icon name="trash" size={24}/></div>
+            <h3 id="delete-profile-title">Delete profile &ldquo;{deletingTarget.profile.name || "Learner"}&rdquo;?</h3>
+            <p>This will permanently remove this learning profile and all its saved progress from the database. This action cannot be undone.</p>
+            {deleteError && <p className="api-error" role="alert">{deleteError}</p>}
+            <div className="delete-profile-actions">
+              <Button variant="secondary" onClick={() => setDeletingTarget(null)} disabled={isDeleting}>Cancel</Button>
+              <button type="button" className="btn-danger" onClick={confirmDelete} disabled={isDeleting}>
+                {isDeleting ? "Deleting…" : "Delete profile"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>}
 
     {step === 1 && <main className="setup-card">
@@ -952,42 +1638,75 @@ function ProfileSetup({ initial, editing, returning, profiles, activeProfileId, 
       <div className="setup-form">
         <label className="setup-field"><span>What should Calibrat8 call you?</span><input value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} placeholder="Your name"/></label>
         <label className="setup-field"><span>Age range</span><select value={profile.level} onChange={e => setProfile({ ...profile, level: e.target.value })}><option>Under 13</option><option>13–17</option><option>18–24</option><option>25–34</option><option>35–49</option><option>50 or older</option><option>Prefer not to say</option></select></label>
-        <div className="setup-field"><span>Your interests <small>Choose up to four</small></span><div className="choice-grid">{["Science & nature", "Math & logic", "History & culture", "Languages", "Technology", "Arts & creativity"].map(interest => <button key={interest} className={profile.subjects.includes(interest) ? "selected" : ""} onClick={() => toggleSubject(interest)}><span>{interest.slice(0, 2)}</span>{interest}{profile.subjects.includes(interest) && <Icon name="check" size={15}/>}</button>)}</div><input aria-label="Add a custom interest" placeholder="Add another interest and press Enter…" disabled={profile.subjects.length >= 4} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const interest = e.currentTarget.value.trim(); if (interest && !profile.subjects.includes(interest)) { toggleSubject(interest); e.currentTarget.value = ""; } } }}/></div>
+        <div className="setup-field"><span>Your interests <small>Choose up to four</small></span><div className="choice-grid">{[...PRESET_INTERESTS, ...profile.subjects.filter(subject => !PRESET_INTERESTS.includes(subject))].map(interest => <button key={interest} className={profile.subjects.includes(interest) ? "selected" : ""} onClick={() => toggleSubject(interest)}><span>{interest.slice(0, 2)}</span>{interest}{profile.subjects.includes(interest) && <Icon name="check" size={15}/>}</button>)}</div><input aria-label="Add a custom interest" placeholder="Add another interest and press Enter…" disabled={profile.subjects.length >= 4} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); const interest = e.currentTarget.value.trim(); if (interest && !profile.subjects.includes(interest)) { toggleSubject(interest); e.currentTarget.value = ""; } } }}/></div>
       </div>
-      <div className="setup-actions">{editing && <Button variant="ghost" onClick={onCancel}>Cancel</Button>}<Button variant="secondary" onClick={returnToWelcome}>Back</Button><Button disabled={!profile.name.trim() || profile.subjects.length === 0} onClick={() => setStep(2)} icon="arrow">Analyze my device</Button></div>
+      {apiError && <p className="api-error" role="alert">{apiError}</p>}
+      <div className="setup-actions">{editing && <Button variant="ghost" onClick={onCancel} disabled={saving}>Cancel</Button>}<Button variant="secondary" onClick={returnToWelcome} disabled={saving}>Back</Button><Button disabled={saving || !profile.name.trim() || profile.subjects.length === 0} onClick={saveAccountAndAnalyze} icon="arrow">{saving ? "Saving profile…" : "Analyze my device"}</Button></div>
     </main>}
 
     {step === 2 && <main className="setup-card">
-      <div className="setup-heading"><Badge tone="blue">{analysisStage < 4 ? "ANALYZING DEVICE" : "CHOOSE YOUR MODEL"}</Badge><h1>{analysisStage < 4 ? "Finding the smoothest fit for your device." : "Select the local model you prefer."}</h1><p>This prototype uses the device specifications you provided to compare models. No model is downloaded or installed during setup.</p></div>
+      <div className="setup-heading"><Badge tone="blue">{analysisReady ? "CHOOSE YOUR MODEL" : "ANALYZING DEVICE"}</Badge><h1>{analysisReady ? "Select the local model you prefer." : "Finding the smoothest fit for your device."}</h1><p>Calibrat8 reads your hardware through the local backend and compares compatible Ollama models. If the model you choose isn’t installed yet, it downloads in the background.</p></div>
       <div className="panel automatic-analysis" aria-live="polite">
-        {analysisStage < 4 ? <>
+        {analysisError ? <div className="analysis-error">
+          <div className="analysis-orb is-error"><Icon name="offline" size={27}/></div>
+          <div className="analysis-copy"><p className="eyebrow">DEVICE CHECK PAUSED</p><h3>We couldn’t analyze this device.</h3><p>{analysisError}</p></div>
+          <Button onClick={() => setAnalysisAttempt(attempt => attempt + 1)} icon="arrow">Try again</Button>
+        </div> : !(analysisReady && detected && suggestions) ? <>
           <div className="analysis-orb"><Icon name={analysisStage < 4 ? "spark" : "check"} size={27}/><i/></div>
           <div className="analysis-copy"><p className="eyebrow">AUTOMATIC CHECK</p><h3>{analysisStage < 4 ? "Reading safe browser signals…" : "Analysis complete"}</h3><p>{analysisStage < 4 ? "This takes only a moment." : "Your recommendation favors smooth performance and leaves room for study materials."}</p></div>
           <div className="animated-analysis">
             {["Reading system and memory", "Checking GPU and VRAM", "Reviewing storage and CPU", "Matching compatible models"].map((message, index) => <div className={analysisStage > index ? "complete" : analysisStage === index ? "active" : ""} key={message}><span>{analysisStage > index ? <Icon name="check" size={14}/> : <i/>}</span><p><strong>{message}</strong><small>{analysisStage > index ? "Complete" : analysisStage === index ? "Analyzing…" : "Waiting"}</small></p></div>)}
           </div>
         </> : <div>
-          <div className="device-analysis-head"><span><Icon name="check"/></span><div><p className="eyebrow">ANALYSIS COMPLETE</p><h3>Your device can run compact and 7B quantized models.</h3></div></div>
+          <div className="device-analysis-head"><span><Icon name="check"/></span><div><p className="eyebrow">ANALYSIS COMPLETE</p><h3>Your device can smoothly run {recommendedCount} of {suggestions.models.length} local models.</h3></div></div>
           <div className="summary-stats">
-            <span><strong>15.9 GB</strong><small>RAM</small></span>
-            <span><strong>6 GB</strong><small>GTX 1660 SUPER VRAM</small></span>
-            <span><strong>16</strong><small>CPU cores</small></span>
-            <span><strong>52.1 GB</strong><small>Free storage</small></span>
-            <span><strong>Windows 11</strong><small>Operating system</small></span>
-            <span><strong>NVIDIA</strong><small>GPU acceleration</small></span>
+            <span><strong>{detected.ram_gb} GB</strong><small>RAM</small></span>
+            <span>
+              <strong>
+                {detected.gpu_name?.toLowerCase().includes("apple")
+                  ? `${detected.ram_gb} GB`
+                  : detected.vram_gb > 0 ? `${detected.vram_gb} GB` : "Shared"}
+              </strong>
+              <small>
+                {detected.gpu_name?.toLowerCase().includes("apple")
+                  ? "Unified Memory"
+                  : `${shortGpuName(detected)} VRAM`}
+              </small>
+            </span>
+            <span><strong>{detected.cpu_cores}</strong><small>CPU cores</small></span>
+            <span><strong>{detected.storage_free_gb} GB</strong><small>Free storage</small></span>
+            <span><strong>{detected.os_name}</strong><small>Operating system</small></span>
+            <span>
+              <strong>{gpuVendor(detected)}</strong>
+              <small>
+                {detected.gpu_name?.toLowerCase().includes("apple")
+                  ? "Metal acceleration"
+                  : detected.vram_gb > 0 ? "GPU acceleration" : "CPU mode"}
+              </small>
+            </span>
           </div>
-          <div className="section-heading"><div><p className="eyebrow">COMPATIBLE MODELS</p><h3>Choose one model</h3></div><Badge tone="neutral">{profile.modelPreference || "Not selected"}</Badge></div>
-          <div className="learning-styles">
-            {[
-              ["Llama 3.2 3B Instruct · Q4", "Recommended · Fast and responsive for tutoring, summaries, and flashcards.", "spark"],
-              ["Phi-3.5 Mini · Q4", "Balanced · Strong reasoning in a compact model with comfortable memory headroom.", "layers"],
-              ["Qwen2.5 7B Instruct · Q4", "Best quality · Uses more of the 6 GB VRAM and may respond more slowly.", "book"],
-            ].map(([name, copy, icon]) => <button key={name} className={profile.modelPreference === name ? "selected" : ""} onClick={() => setProfile({ ...profile, modelPreference: name })} aria-pressed={profile.modelPreference === name}><span><Icon name={icon as IconName}/></span><div><strong>{name}</strong><p>{copy}</p></div><i>{profile.modelPreference === name && <Icon name="check" size={15}/>}</i></button>)}
+          <div className="section-heading"><div><p className="eyebrow">COMPATIBLE MODELS</p><h3>Choose one model</h3></div><Badge tone={ollamaInfo?.is_online ? "sage" : "neutral"}>{ollamaInfo ? (ollamaInfo.is_online ? `OLLAMA ONLINE · ${ollamaInfo.count} INSTALLED` : "OLLAMA OFFLINE") : profile.modelPreference || "Not selected"}</Badge></div>
+          <div className="learning-styles model-options">
+            {sortedModels.map(option => {
+              const selected = profile.modelTag === option.model_name;
+              const isTop = option.model_name === suggestions.recommended_model;
+              const installed = isModelInstalled(option.model_name, ollamaInfo?.installed_models);
+              return <button key={option.model_name} id={`model-option-${option.model_name.replace(/[^a-z0-9]+/gi, "-")}`} className={`${selected ? "selected" : ""} ${option.is_recommended ? "" : "not-recommended"}`.trim()} onClick={() => selectModelOption(option)} aria-pressed={selected}>
+                <span><Icon name={isTop ? "spark" : option.is_recommended ? "layers" : "book"}/></span>
+                <div>
+                  <strong>{option.display_name} · {option.size_gb} GB</strong>
+                  <div className="model-tags">{isTop && <Badge tone="peach">RECOMMENDED</Badge>}<Badge tone="neutral">{option.tier.toUpperCase()} TIER</Badge>{installed && <Badge tone="sage">INSTALLED</Badge>}{!option.is_recommended && <Badge tone="neutral">MAY BE SLOW</Badge>}</div>
+                  <p>{option.reason}</p>
+                </div>
+                <i>{selected && <Icon name="check" size={15}/>}</i>
+              </button>;
+            })}
           </div>
         </div>}
       </div>
-      <div className="hardware-note"><Icon name="settings"/><p><strong>Provided device profile</strong><br/>15.9 GB RAM · NVIDIA GeForce GTX 1660 SUPER · 6 GB VRAM · 16 CPU cores · 52.1 GB free · Windows 11.</p></div>
-      <div className="setup-actions"><Button variant="secondary" onClick={() => setStep(1)}>Back</Button><Button disabled={analysisStage < 4 || !profile.modelPreference} onClick={() => setStep(3)} icon="arrow">Use selected model</Button></div>
+      {detected && <div className="hardware-note"><Icon name="settings"/><p><strong>Detected device profile</strong><br/>{deviceSummaryLine(detected)}</p></div>}
+      {apiError && <p className="api-error" role="alert">{apiError}</p>}
+      <div className="setup-actions"><Button variant="secondary" onClick={() => setStep(1)} disabled={saving}>Back</Button><Button disabled={!analysisReady || !suggestions || !profile.modelTag || saving} onClick={saveDeviceAndContinue} icon="arrow">{saving ? "Saving device…" : "Use selected model"}</Button></div>
     </main>}
 
     {step === 3 && <main className="setup-card">
@@ -1030,7 +1749,7 @@ function ProfileSetup({ initial, editing, returning, profiles, activeProfileId, 
         return <button key={title} className={selected ? "selected" : ""} aria-pressed={selected} onClick={() => setProfile({ ...profile, learningStyle: title })}><span><Icon name={icon as IconName}/></span><div><strong>{title}</strong><p>{copy}</p></div><i>{selected && <Icon name="check" size={15}/>}</i></button>;
       })}</div>
       <label className="personalization-toggle"><span><Icon name="spark"/><p><strong>Personalized recommendations</strong><small>Use saved quiz attempts, completed activities, and your preferences to suggest what to study next.</small></p></span><input type="checkbox" checked={profile.personalization} onChange={e => setProfile({ ...profile, personalization: e.target.checked })}/><i/></label>
-      <div className="local-ai-note"><Icon name="offline"/><p><strong>Local AI is not configured on this device.</strong><br/>Saved lessons, plans, flashcards, and supported quizzes still work offline. Live AI features require a connection.</p></div>
+      <LocalAiNote status={modelStatus} error={modelStatusError} modelTag={profile.modelTag}/>
       <div className="setup-actions"><Button variant="secondary" onClick={() => setStep(3)}>Back</Button><Button onClick={() => onComplete(profile, creatingNew)} icon="check">{editing ? "Save preferences" : "Finish setup"}</Button></div>
     </main>}
   </div>;
@@ -1057,6 +1776,73 @@ export default function App() {
   const [latestAttempt, setLatestAttempt] = useState<Attempt | null>(initialProfile?.attempts.at(-1) || null);
   const [setupOpen, setSetupOpen] = useState(true);
   const [editingProfile, setEditingProfile] = useState(false);
+  const profilesRef = useRef(profiles);
+  const activeIdRef = useRef(activeProfileId);
+  useEffect(() => { profilesRef.current = profiles; }, [profiles]);
+  useEffect(() => { activeIdRef.current = activeProfileId; }, [activeProfileId]);
+
+  const updateLearnerProfile = (learnerId: string, update: (current: ProfileData) => ProfileData) => {
+    const nextProfiles = profilesRef.current.map(item => item.id === learnerId ? { ...item, profile: update(item.profile), updatedAt: new Date().toISOString() } : item);
+    const updated = nextProfiles.find(item => item.id === learnerId);
+    if (!updated) return;
+    profilesRef.current = nextProfiles;
+    setProfiles(nextProfiles);
+    if (activeIdRef.current === learnerId) setProfile(updated.profile);
+    persistProfiles(nextProfiles, activeIdRef.current);
+  };
+
+  const syncProfileFromServer = async (learnerId: string, onboardingId: number | null) => {
+    if (onboardingId == null) return;
+    try {
+      const [remote, device] = await Promise.all([api.getOnboardingById(onboardingId), api.getDeviceByAccount(onboardingId)]);
+      updateLearnerProfile(learnerId, current => remote ? applyRemoteProfile(current, remote, device) : { ...current, onboardingId: null });
+    } catch {
+      // Backend unreachable: keep the locally saved copy so the app keeps working offline.
+    }
+  };
+
+  const handleModelChange = (tag: string, label: string, specs?: DeviceSpecsDetect | null) => {
+    if (!activeProfileId) return;
+    updateLearnerProfile(activeProfileId, current => ({
+      ...current,
+      modelTag: tag,
+      modelPreference: label,
+      deviceSpecs: specs || current.deviceSpecs,
+      deviceType: specs?.os_name || current.deviceType,
+      deviceMemory: specs ? `${specs.ram_gb} GB` : current.deviceMemory,
+    }));
+  };
+
+  useEffect(() => {
+    // Pull onboarding profiles from the backend and merge them with the offline cache.
+    let cancelled = false;
+    api.listOnboarding().then(remote => {
+      if (cancelled) return;
+      const merged = mergeRemoteProfiles(profilesRef.current, remote);
+      const currentId = activeIdRef.current;
+      const activeId = currentId && merged.some(item => item.id === currentId) ? currentId : merged[0]?.id ?? null;
+      const active = merged.find(item => item.id === activeId);
+      profilesRef.current = merged;
+      activeIdRef.current = activeId;
+      setProfiles(merged);
+      setActiveProfileId(activeId);
+      if (active) {
+        setProfile(active.profile);
+        setAttempts(active.attempts);
+        setLatestAttempt(active.attempts.at(-1) || null);
+      }
+      persistProfiles(merged, activeId);
+      const activeOnboardingId = active?.profile.onboardingId;
+      if (active && activeOnboardingId != null) {
+        api.getDeviceByAccount(activeOnboardingId).then(device => {
+          if (!cancelled && device) updateLearnerProfile(active.id, current => applyDeviceRecord(current, device));
+        }).catch(() => undefined);
+      }
+    }).catch(() => {
+      // Offline or backend not running: continue with locally saved profiles.
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => setOnline(true);
@@ -1093,7 +1879,25 @@ export default function App() {
     persistProfiles(nextProfiles, profileId);
     setSetupOpen(false);
     setEditingProfile(false);
+    setCreatingNewProfile(false);
   };
+  const [creatingNewProfile, setCreatingNewProfile] = useState(false);
+
+  const handleLogout = () => {
+    setSetupOpen(true);
+    setEditingProfile(false);
+    setCreatingNewProfile(false);
+  };
+
+  const handleAddProfile = () => {
+    setProfile(emptyProfile);
+    setAttempts([]);
+    setLatestAttempt(null);
+    setEditingProfile(false);
+    setCreatingNewProfile(true);
+    setSetupOpen(true);
+  };
+
   const selectProfile = (profileId: string) => {
     const selected = profiles.find(item => item.id === profileId);
     if (!selected) return;
@@ -1103,6 +1907,7 @@ export default function App() {
     setLatestAttempt(selected.attempts.at(-1) || null);
     setPage("home");
     persistProfiles(profiles, profileId);
+    void syncProfileFromServer(profileId, selected.profile.onboardingId);
   };
   const saveAttempt = (attempt: Attempt) => {
     const next = [...attempts, attempt];
@@ -1120,7 +1925,75 @@ export default function App() {
     source: "study",
     concepts: [{ name: "Inverse operations", correct: score === total }],
   });
-  if (setupOpen) return <ProfileSetup initial={profile} editing={editingProfile} returning={profiles.length > 0 && !editingProfile} profiles={profiles} activeProfileId={activeProfileId} onComplete={saveProfile} onResume={() => setSetupOpen(false)} onSelectProfile={selectProfile} onCancel={() => { setSetupOpen(false); setEditingProfile(false); }}/>;
+  const [deleteConfirmFromSettings, setDeleteConfirmFromSettings] = useState(false);
+  const [isDeletingFromSettings, setIsDeletingFromSettings] = useState(false);
+  const [deleteSettingsError, setDeleteSettingsError] = useState("");
+
+  const handleDeleteProfile = async (learnerId: string) => {
+    const target = profilesRef.current.find(item => item.id === learnerId);
+    if (!target) return;
+    if (target.profile.onboardingId != null) {
+      try {
+        await api.deleteOnboarding(target.profile.onboardingId);
+      } catch (err) {
+        if (!(err instanceof ApiError && err.status === 404)) {
+          throw err;
+        }
+      }
+    }
+    const nextProfiles = profilesRef.current.filter(item => item.id !== learnerId);
+    profilesRef.current = nextProfiles;
+    setProfiles(nextProfiles);
+
+    const nextActiveId = activeIdRef.current === learnerId
+      ? (nextProfiles[0]?.id ?? null)
+      : activeIdRef.current;
+
+    activeIdRef.current = nextActiveId;
+    setActiveProfileId(nextActiveId);
+    const nextActive = nextProfiles.find(item => item.id === nextActiveId);
+    if (nextActive) {
+      setProfile(nextActive.profile);
+      setAttempts(nextActive.attempts);
+      setLatestAttempt(nextActive.attempts.at(-1) || null);
+    } else {
+      setProfile(emptyProfile);
+      setAttempts([]);
+      setLatestAttempt(null);
+      setSetupOpen(true);
+      setEditingProfile(false);
+      setCreatingNewProfile(true);
+    }
+    persistProfiles(nextProfiles, nextActiveId);
+  };
+
+  const confirmDeleteActiveFromSettings = async () => {
+    if (!activeProfileId) return;
+    setIsDeletingFromSettings(true);
+    setDeleteSettingsError("");
+    try {
+      await handleDeleteProfile(activeProfileId);
+      setDeleteConfirmFromSettings(false);
+    } catch (err) {
+      setDeleteSettingsError(describeApiError(err));
+    } finally {
+      setIsDeletingFromSettings(false);
+    }
+  };
+
+  if (setupOpen) return <ProfileSetup
+    initial={creatingNewProfile ? emptyProfile : profile}
+    editing={editingProfile}
+    returning={profiles.length > 0 && !editingProfile && !creatingNewProfile}
+    startInNew={creatingNewProfile}
+    profiles={profiles}
+    activeProfileId={activeProfileId}
+    onComplete={saveProfile}
+    onResume={() => { setSetupOpen(false); setCreatingNewProfile(false); }}
+    onSelectProfile={selectProfile}
+    onDeleteProfile={handleDeleteProfile}
+    onCancel={() => { setSetupOpen(false); setEditingProfile(false); setCreatingNewProfile(false); }}
+  />;
   if (page === "focus") return <Focus exit={() => setPage("library")} completeSession={completeStudy}/>;
   const titles: Record<Page, string> = {
     home: "Home", tutor: "AI Tutor", planner: "Study Mode", focus: "Focus", lessons: "Lessons",
@@ -1130,7 +2003,19 @@ export default function App() {
     settings: "Settings", coach: "Learning Coach", progress: "Practice & Progress",
   };
   return <div className="app-shell">
-    <Sidebar page={page} setPage={setPage} online={online} setOnline={setOnline} profile={profile} editProfile={() => { setEditingProfile(true); setSetupOpen(true); }}/>
+    <Sidebar
+      page={page}
+      setPage={setPage}
+      online={online}
+      setOnline={setOnline}
+      profile={profile}
+      editProfile={() => { setEditingProfile(true); setCreatingNewProfile(false); setSetupOpen(true); }}
+      profiles={profiles}
+      activeProfileId={activeProfileId}
+      onSelectProfile={selectProfile}
+      onLogout={handleLogout}
+      onAddProfile={handleAddProfile}
+    />
     <main className="main-shell"><Topbar title={titles[page]} online={online} setOnline={setOnline}/>
       {page === "home" && <Home go={setPage} online={online} openOffline={() => setOfflineOpen(true)} profile={profile}/>}
       {page === "tutor" && <Tutor online={online}/>}
@@ -1146,11 +2031,27 @@ export default function App() {
       {page === "knowledge" && <KnowledgeMap attempt={latestAttempt} recommendations={() => setPage("recommendations")}/>}
       {page === "recommendations" && <Recommendations attempt={latestAttempt} start={() => setPage("focus")} library={() => setPage("library")}/>}
       {page === "report" && <ComparisonReport attempts={attempts} takeQuiz={() => setPage("quiz")}/>}
-      {page === "settings" && <Settings online={online} setOnline={setOnline} profile={profile} editProfile={() => { setEditingProfile(true); setSetupOpen(true); }}/>}
+      {page === "settings" && <Settings online={online} setOnline={setOnline} profile={profile} onModelChange={handleModelChange} editProfile={() => { setEditingProfile(true); setSetupOpen(true); }} onDeleteProfile={() => { setDeleteSettingsError(""); setDeleteConfirmFromSettings(true); }}/>}
       {page === "progress" && <Progress openCoach={() => setPage("coach")}/>}
       {page === "coach" && <Coach back={() => setPage("progress")}/>}
     </main>
     <MobileNav page={page} setPage={setPage}/>
     {offlineOpen && <OfflineModal online={online} close={() => setOfflineOpen(false)} toggle={() => setOnline(true)}/>}
+    {deleteConfirmFromSettings && (
+      <div className="modal-backdrop" onMouseDown={() => !isDeletingFromSettings && setDeleteConfirmFromSettings(false)}>
+        <div className="delete-profile-modal" onMouseDown={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="delete-profile-settings-title">
+          <div className="delete-modal-icon"><Icon name="trash" size={24}/></div>
+          <h3 id="delete-profile-settings-title">Delete profile &ldquo;{profile.name || "this learner"}&rdquo;?</h3>
+          <p>This will permanently remove this learning profile and all its saved progress from the database. This action cannot be undone.</p>
+          {deleteSettingsError && <p className="api-error" role="alert">{deleteSettingsError}</p>}
+          <div className="delete-profile-actions">
+            <Button variant="secondary" onClick={() => setDeleteConfirmFromSettings(false)} disabled={isDeletingFromSettings}>Cancel</Button>
+            <button type="button" className="btn-danger" onClick={confirmDeleteActiveFromSettings} disabled={isDeletingFromSettings}>
+              {isDeletingFromSettings ? "Deleting…" : "Delete profile"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
   </div>;
 }

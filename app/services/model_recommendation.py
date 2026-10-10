@@ -74,12 +74,29 @@ def recommend_models_for_hardware(
     vram_gb: float = 0.0,
     gpu_name: str | None = None,
 ) -> ModelSuggestionsResponse:
-    """Analyze hardware specs and return list of model options with reasons for applicability."""
+    """Analyze hardware specs across Windows and macOS and return model options with suitability reasons."""
     options: list[ModelOption] = []
-    top_recommended = "llama3.2:1b"
+    gpu_str = (gpu_name or "").lower()
+    is_apple_silicon = bool(
+        "apple" in gpu_str
+        or "metal" in gpu_str
+        or "m1" in gpu_str
+        or "m2" in gpu_str
+        or "m3" in gpu_str
+        or "m4" in gpu_str
+    )
+    has_nvidia = bool(any(k in gpu_str for k in ("nvidia", "geforce", "rtx", "gtx")))
+    has_discrete_vram = vram_gb >= 3.0 or has_nvidia
 
     # Determine top tier recommendation
-    if ram_gb >= 15.0 or (vram_gb >= 4.0):
+    if is_apple_silicon:
+        if ram_gb >= 15.0:
+            top_recommended = "llama3.2:3b"
+        elif ram_gb >= 7.5:
+            top_recommended = "llama3.2:1b"
+        else:
+            top_recommended = "qwen2.5:0.5b"
+    elif has_discrete_vram or ram_gb >= 15.0 or (vram_gb >= 4.0):
         top_recommended = "llama3.2:3b"
     elif ram_gb >= 7.5:
         top_recommended = "llama3.2:1b"
@@ -96,12 +113,18 @@ def recommend_models_for_hardware(
         is_recommended = False
         reasons = []
 
-        # Check memory fit
-        if ram_gb < min_ram and vram_gb < min_vram:
-            is_recommended = False
-            reasons.append(
-                f"Requires at least {min_ram}GB RAM (device has {ram_gb}GB). May cause slowdowns."
-            )
+        # Check memory fit for Apple Silicon vs PC Discrete VRAM vs Standard CPU
+        if is_apple_silicon:
+            if ram_gb >= min_ram:
+                is_recommended = True
+                reasons.append(
+                    f"Fits in Apple Silicon Unified Memory ({ram_gb}GB RAM). Accelerated by Metal GPU."
+                )
+            else:
+                is_recommended = False
+                reasons.append(
+                    f"Requires at least {min_ram}GB unified RAM (Mac has {ram_gb}GB). May swap to SSD."
+                )
         elif vram_gb >= min_vram and min_vram > 0:
             is_recommended = True
             reasons.append(f"Fits in dedicated VRAM ({vram_gb}GB VRAM >= {min_vram}GB required).")
@@ -110,12 +133,28 @@ def recommend_models_for_hardware(
             reasons.append(
                 f"Fits in system RAM ({ram_gb}GB RAM >= {min_ram}GB required). CPU mode ready."
             )
+        else:
+            is_recommended = False
+            reasons.append(
+                f"Requires at least {min_ram}GB RAM (device has {ram_gb}GB). May cause slowdowns."
+            )
 
         if m_name == top_recommended:
             is_recommended = True
-            reasons.insert(
-                0, f"★ Optimal match for your hardware ({ram_gb}GB RAM, {gpu_name or 'CPU'})."
-            )
+            if is_apple_silicon:
+                reasons.insert(
+                    0,
+                    f"★ Optimal match for Apple Silicon ({ram_gb}GB Unified Memory, {gpu_name or 'Metal GPU'}).",
+                )
+            elif has_nvidia:
+                reasons.insert(
+                    0,
+                    f"★ Optimal match: NVIDIA GPU accelerated ({gpu_name or 'NVIDIA GPU'}, {vram_gb}GB VRAM).",
+                )
+            else:
+                reasons.insert(
+                    0, f"★ Optimal match for your hardware ({ram_gb}GB RAM, {gpu_name or 'CPU'})."
+                )
 
         reason_str = " ".join(reasons) if reasons else entry["desc"]
 
