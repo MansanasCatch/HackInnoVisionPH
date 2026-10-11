@@ -121,11 +121,14 @@ def build_study_prompts(
         "- Never hallucinate, invent formulas, definitions, dates, or answers unsupported by the text.\n"
         "- Do not silently fill gaps using general knowledge. If an important topic or formula is absent, list it in 'content_gaps'.\n"
         "- Preserve units, numbers, technical terminology, conditions, and exceptions.\n\n"
-        "3. QUESTION AND QUIZ RULES:\n"
-        "- MULTIPLE_CHOICE: 4 plausible options, only 1 correct, clear distractors, valid correct_answer.\n"
-        "- TRUE_FALSE: Test one clear unambiguous factual statement grounded in the source.\n"
-        "- IDENTIFICATION / SHORT_ANSWER: Clear conceptual question with accurate reference answer and explanation.\n"
-        "- EXAM / ESSAY: Rigorous, clear scoring criteria, accurate rubric, points defined.\n\n"
+        "3. QUESTION RIGOR AND HIGHER-ORDER THINKING (BLOOM'S TAXONOMY LEVEL 3-5):\n"
+        "- NEVER write naive, elementary fill-in-the-blank vocabulary recall questions (e.g. avoid 'What term means...', 'Which organelle is the powerhouse...').\n"
+        "- Every question MUST test deep conceptual comprehension, biochemical or systemic mechanisms, cause-and-effect relationships, experimental analysis, or diagnostic/problem-solving scenarios.\n"
+        "- MULTIPLE_CHOICE: 4 sophisticated, plausible options. Distractors must represent real student misconceptions, plausible counter-mechanisms, or related contrasting pathways—never absurd or throwaway choices.\n"
+        "- EXPLANATIONS: Every question MUST provide an in-depth pedagogical breakdown explaining BOTH why the correct option is scientifically accurate AND why major distractors are ruled out.\n"
+        "- TRUE_FALSE: Test precise conceptual relationships, conditional exceptions, or analytical claims grounded in the source.\n"
+        "- IDENTIFICATION / SHORT_ANSWER: Pose meaningful analytical prompts requiring synthesis of mechanism, components, or outcomes.\n"
+        "- EXAM / ESSAY: Rigorous, structured multi-part problems with explicit scoring rubrics, point breakdowns, and model answers.\n\n"
         "4. OUTPUT FORMATTING:\n"
         "- Return ONLY a single, valid parseable JSON object matching the requested schema.\n"
         "- Do NOT include Markdown formatting (no ```json code blocks), no preambles, and no closing conversational text."
@@ -375,85 +378,123 @@ def build_offline_fallback_study_materials(
         if word:
             cloze.append((s, _blank(s, word), word))
 
+    # Generate rigorous analytical questions from source sentences
+    analytical_templates = [
+        (
+            "Regarding {topic}, which principle accurately characterizes this mechanism: \"{sentence}\"?",
+            "It represents an active pathway where {s_lower}.",
+            "It acts purely as an inert byproduct phase without enzymatic catalysis or molecular regulation.",
+            "It operates exclusively outside biological systems with zero dependence on cellular compartmentalization.",
+            "It completely degrades nucleotide energy stores without transferring metabolic intermediates.",
+        ),
+        (
+            "What is the primary operational significance of the following process in {topic}: \"{sentence}\"?",
+            "It provides critical functional pathways ensuring that {s_lower}.",
+            "It eliminates all metabolic gradients through uncoupled thermal loss.",
+            "It functions independently of substrate concentration and thermodynamics.",
+            "It is restricted entirely to non-functional structural artifacts.",
+        ),
+        (
+            "If an inhibitor selectively interfered with the stage described as \"{sentence}\", what outcome would most directly follow in {topic}?",
+            "The metabolic continuity where {s_lower} would be significantly disrupted.",
+            "The system would spontaneously double its output without substrate input.",
+            "The entire system would remain completely indifferent due to total metabolic insulation.",
+            "Cellular energy turnover would become completely independent of thermodynamic principles.",
+        ),
+        (
+            "In an analytical assessment of {topic}, which conclusion is most solidly substantiated by the fact that \"{sentence}\"?",
+            "This confirms that {s_lower} serves as a foundational operational component of the system.",
+            "This proves that biological systems require no molecular turnover to sustain activity.",
+            "This indicates that the process is entirely random and lacks regulatory control.",
+            "This demonstrates that environmental and physical parameters have no influence on function.",
+        ),
+    ]
+
     flashcards = [
         Flashcard(
-            question=f"Fill in the blank: {blanked}",
-            answer=answer,
+            question=f"What is the core functional mechanism and role of the following in {resolved_topic}: \"{s}\"?",
+            answer=s,
             topic=resolved_topic,
-            difficulty="easy",
+            difficulty="medium",
         )
-        for _, blanked, answer in cloze
+        for s in sentences[:8]
     ] or [
         Flashcard(
-            question=f"What is the key takeaway regarding {resolved_topic}?",
+            question=f"What is the key principle regarding {resolved_topic}?",
             answer=first_fact,
             topic=resolved_topic,
-            difficulty="easy",
+            difficulty="medium",
         )
     ]
 
     quizzes: list[QuizQuestion] = []
-    all_terms = list(dict.fromkeys(a for _, _, a in cloze))
-    default_distractors = ["Energy transfer", "Enzymatic reaction", "Cellular membrane", "Metabolic pathway"]
-
-    for n, (sentence, blanked, answer) in enumerate(cloze[:15]):
-        pool = [t for t in all_terms if t.lower() != answer.lower()] + default_distractors
-        distractors = [p for p in pool if p.lower() != answer.lower()][:3]
-        while len(distractors) < 3:
-            distractors.append(f"Factor {len(distractors) + 1}")
-        options = [*distractors[:3], answer]
-        shift = n % len(options)
+    for idx, sentence in enumerate(sentences[:14]):
+        template_idx = idx % len(analytical_templates)
+        stem_fmt, cor_fmt, dist1, dist2, dist3 = analytical_templates[template_idx]
+        s_lower = sentence[0].lower() + sentence[1:] if sentence else ""
+        stem = stem_fmt.format(topic=resolved_topic, sentence=sentence)
+        correct = cor_fmt.format(s_lower=s_lower.rstrip("."))
+        options = [correct, dist1, dist2, dist3]
+        shift = idx % len(options)
         options = options[shift:] + options[:shift]
+
         quizzes.append(
             QuizQuestion(
                 type="multiple_choice",
-                question=f"Question {n + 1}: Which term completes this statement? \"{blanked}\"",
+                question=f"Question {len(quizzes) + 1}: {stem}",
                 options=options,
-                correct_answer=answer,
-                explanation=f"From your material: {sentence}.",
+                correct_answer=correct,
+                explanation=(
+                    f"Pedagogical Analysis: The source material explicitly confirms that '{sentence}'. "
+                    f"Option '{correct}' accurately captures this principle, while the alternative distractors "
+                    f"present thermodynamically or biologically inaccurate mechanisms."
+                ),
                 topic=resolved_topic,
                 difficulty="medium",
             )
         )
 
-    # Pad multiple choice if sentences were few
+    # Pad multiple choice with high-order conceptual analysis questions if source sentences were brief
     while len(quizzes) < 14:
         q_idx = len(quizzes) + 1
+        ref_s = sentences[(q_idx - 1) % len(sentences)] if sentences else first_fact
         quizzes.append(
             QuizQuestion(
                 type="multiple_choice",
-                question=f"Question {q_idx}: Which statement best describes a core characteristic of {resolved_topic}?",
+                question=f"Question {q_idx}: Which analytical statement best represents the biochemical/functional dynamics of {resolved_topic}?",
                 options=[
-                    f"It governs fundamental biochemical and physiological processes in {resolved_topic}.",
-                    "It only operates under zero-oxygen conditions without enzyme mediation.",
-                    "It was synthesized entirely in laboratory environments with no biological relevance.",
-                    "It has no measurable effect on cell energy balance or organism function.",
+                    f"It governs fundamental physiological and biochemical processes consistent with: {ref_s}.",
+                    "It proceeds with zero requirement for biochemical gradients, catalysts, or cofactor mediation.",
+                    "It occurs as an isolated laboratory artifact with no functional counterpart in living systems.",
+                    "It exhibits complete independence from all metabolic regulation and feedback mechanisms.",
                 ],
-                correct_answer=f"It governs fundamental biochemical and physiological processes in {resolved_topic}.",
-                explanation=f"Fundamental to {resolved_topic} as established in curriculum standards.",
+                correct_answer=f"It governs fundamental physiological and biochemical processes consistent with: {ref_s}.",
+                explanation=f"Pedagogical rationale: Established through foundational evidence in {resolved_topic}: '{ref_s}'.",
                 topic=resolved_topic,
                 difficulty="medium",
             )
         )
 
-    # 2. True / False Questions (5 questions)
+    # 2. True / False Questions (5 questions) - Substantive analytical evaluations
     for tf_idx in range(1, 6):
         is_true = tf_idx % 2 != 0
         ref_fact = sentences[tf_idx % len(sentences)] if sentences else first_fact
-        q_text = (
-            f"True or false: {ref_fact}."
-            if is_true
-            else f"True or false: {resolved_topic} operates with zero dependence on energy or biochemical gradients."
-        )
+        if is_true:
+            q_text = f"In {resolved_topic}, evaluate this principle: \"{ref_fact}\". Is this statement conceptually and factually accurate?"
+            exp_text = f"Accurate: The source text confirms this statement directly: '{ref_fact}'."
+        else:
+            q_text = f"In {resolved_topic}, evaluate this claim: \"The pathway operating under {ref_fact} proceeds with zero dependence on energy, substrate availability, or molecular regulation.\" Is this claim valid?"
+            exp_text = f"Inaccurate: Systems involving '{resolved_topic}' strictly depend on substrates, thermodynamic gradients, and molecular regulation."
+
         quizzes.append(
             QuizQuestion(
                 type="true_false",
                 question=f"Question {len(quizzes) + 1}: {q_text}",
                 options=["True", "False"],
                 correct_answer="True" if is_true else "False",
-                explanation=f"Verified against source evidence for {resolved_topic}.",
+                explanation=exp_text,
                 topic=resolved_topic,
-                difficulty="easy",
+                difficulty="medium",
             )
         )
 

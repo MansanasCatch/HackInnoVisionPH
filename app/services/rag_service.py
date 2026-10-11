@@ -129,32 +129,153 @@ def bm25_rank_chunks(
     return scored_results[:top_k]
 
 
-def _query_searxng(query: str, max_results: int = 5) -> list[SearchResult] | None:
-    """Attempt querying local or remote SearXNG instance."""
-    searxng_base = os.getenv("SEARXNG_URL", "http://localhost:8080").rstrip("/")
-    params = urllib.parse.urlencode({"q": query, "format": "json"})
-    req_url = f"{searxng_base}/search?{params}"
+from html.parser import HTMLParser
+
+
+class _HTMLTextExtractor(HTMLParser):
+    """Extract visible paragraph and content text from HTML, stripping boilerplate."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.texts: list[str] = []
+        self._ignore = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in ("script", "style", "noscript", "nav", "footer", "header", "aside", "form"):
+            self._ignore = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in ("script", "style", "noscript", "nav", "footer", "header", "aside", "form"):
+            self._ignore = False
+
+    def handle_data(self, data: str) -> None:
+        if not self._ignore:
+            cleaned = data.strip()
+            if len(cleaned) > 25:
+                self.texts.append(cleaned)
+
+
+def _fetch_webpage_content(url: str, timeout: float = 3.0) -> str | None:
+    """Fetch and parse clean body text from a webpage."""
+    if not url.startswith("http://") and not url.startswith("https://"):
+        return None
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            content_type = resp.headers.get("Content-Type", "").lower()
+            if "text/html" not in content_type and "text/plain" not in content_type:
+                return None
+            raw_html = resp.read(250000).decode("utf-8", errors="ignore")
+            extractor = _HTMLTextExtractor()
+            extractor.feed(raw_html)
+            clean_text = " ".join(extractor.texts).strip()
+            if len(clean_text) > 100:
+                return clean_text[:4000]
+    except Exception:
+        pass
+    return None
+
+
+def _query_duckduckgo_html(query: str, max_results: int = 5) -> list[SearchResult]:
+    """Query DuckDuckGo HTML web search for in-depth educational & topical websites."""
+    encoded_q = urllib.parse.quote(query)
+    search_url = f"https://html.duckduckgo.com/html/?q={encoded_q}"
+    results: list[SearchResult] = []
 
     try:
-        req = urllib.request.Request(req_url, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(req, timeout=2.5) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            raw_results = data.get("results", [])
-            out: list[SearchResult] = []
-            for item in raw_results[:max_results]:
-                out.append(
-                    SearchResult(
-                        title=item.get("title", query),
-                        snippet=item.get("content", ""),
-                        url=item.get("url", ""),
-                        content=item.get("content", ""),
-                    )
+        req = urllib.request.Request(
+            search_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=4.5) as resp:
+            html = resp.read().decode("utf-8", errors="ignore")
+
+        blocks = html.split('class="result ')
+        for b in blocks[1 : max_results + 3]:
+            title_m = re.search(r'<a[^>]+class="result__a[^>]*>(.*?)</a>', b, re.DOTALL)
+            url_m = re.search(r'<a[^>]+class="result__url[^>]*href="([^"]+)"', b)
+            snippet_m = re.search(r'class="result__snippet[^>]*>(.*?)</a>', b, re.DOTALL)
+
+            if not title_m or not snippet_m:
+                continue
+
+            raw_title = re.sub(r"<[^>]+>", "", title_m.group(1)).strip()
+            snippet = re.sub(r"<[^>]+>", "", snippet_m.group(1)).strip()
+            raw_url = url_m.group(1).strip() if url_m else ""
+
+            # Resolve DuckDuckGo redirect if present
+            if "uddg=" in raw_url:
+                parsed = urllib.parse.parse_qs(urllib.parse.urlparse(raw_url).query)
+                target_url = parsed.get("uddg", [raw_url])[0]
+            else:
+                target_url = raw_url
+
+            if not target_url.startswith("http"):
+                continue
+
+            # Attempt deep page text extraction
+            deep_content = _fetch_webpage_content(target_url, timeout=2.5)
+            content = deep_content if deep_content and len(deep_content) > len(snippet) else snippet
+
+            results.append(
+                SearchResult(
+                    title=raw_title,
+                    snippet=snippet,
+                    url=target_url,
+                    content=content,
                 )
-            if out:
-                return out
+            )
+            if len(results) >= max_results:
+                break
     except Exception:
-        # Gracefully proceed to public fallback if SearXNG is unavailable
-        return None
+        pass
+
+    return results
+
+
+def _query_searxng(query: str, max_results: int = 5) -> list[SearchResult] | None:
+    """Attempt querying local or remote SearXNG instances."""
+    instances = [
+        os.getenv("SEARXNG_URL", "http://localhost:8080").rstrip("/"),
+        "https://searx.be",
+        "https://priv.au",
+    ]
+    params = urllib.parse.urlencode({"q": query, "format": "json"})
+
+    for searxng_base in instances:
+        req_url = f"{searxng_base}/search?{params}"
+        try:
+            req = urllib.request.Request(req_url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(req, timeout=2.5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                raw_results = data.get("results", [])
+                out: list[SearchResult] = []
+                for item in raw_results[:max_results]:
+                    u = item.get("url", "")
+                    snip = item.get("content", "")
+                    deep_text = _fetch_webpage_content(u, timeout=2.0)
+                    body = deep_text if deep_text and len(deep_text) > len(snip) else snip
+                    out.append(
+                        SearchResult(
+                            title=item.get("title", query),
+                            snippet=snip,
+                            url=u,
+                            content=body,
+                        )
+                    )
+                if out:
+                    return out
+        except Exception:
+            continue
     return None
 
 
@@ -202,27 +323,46 @@ def _query_wikipedia(query: str, max_results: int = 3) -> list[SearchResult]:
     return results
 
 
-def search_web_for_topic(query: str, max_results: int = 5) -> list[SearchResult]:
-    """Execute online research for a given topic with zero dependencies.
+def search_web_for_topic(query: str, max_results: int = 6) -> list[SearchResult]:
+    """Execute comprehensive online research for a given topic across authoritative websites.
 
-    Checks SearXNG first, then falls back to Wikipedia encyclopedia endpoints.
+    Combines web search across diverse educational and scientific domains, deep webpage text
+    extraction, SearXNG instances, and Wikipedia encyclopedia articles.
     If completely offline, produces an authoritative structured educational primer.
     """
     clean_q = query.strip()
     if not clean_q:
         return []
 
-    # 1. Try SearXNG if instance exists
+    collected: list[SearchResult] = []
+    seen_urls: set[str] = set()
+
+    def add_results(items: list[SearchResult]) -> None:
+        for r in items:
+            normalized_url = r.url.rstrip("/").lower()
+            if normalized_url and normalized_url not in seen_urls:
+                seen_urls.add(normalized_url)
+                collected.append(r)
+
+    # 1. Search web for authoritative in-depth articles across domains
+    web_res = _query_duckduckgo_html(clean_q, max_results=max_results)
+    if web_res:
+        add_results(web_res)
+
+    # 2. Try SearXNG (local or remote)
     searx_res = _query_searxng(clean_q, max_results=max_results)
     if searx_res:
-        return searx_res
+        add_results(searx_res)
 
-    # 2. Try Public Wikipedia Educational API
-    wiki_res = _query_wikipedia(clean_q, max_results=max_results)
+    # 3. Query Wikipedia encyclopedia for structured definitions
+    wiki_res = _query_wikipedia(clean_q, max_results=2)
     if wiki_res:
-        return wiki_res
+        add_results(wiki_res)
 
-    # 3. Offline Educational Knowledge Base Fallback
+    if collected:
+        return collected[:max_results]
+
+    # 4. Offline Educational Knowledge Base Fallback (when machine has zero network access)
     return [
         SearchResult(
             title=f"Core Principles of {clean_q}",

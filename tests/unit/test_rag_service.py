@@ -61,3 +61,12 @@ def test_search_web_for_topic_handles_offline_or_fallback(monkeypatch):
     assert isinstance(results[0], SearchResult)
     assert results[0].title != ""
     assert len(results[0].content) > 10
+
+
+def test_search_web_for_topic_retrieves_non_wikipedia_websites():
+    results = search_web_for_topic("mitochondria ATP synthesis", max_results=5)
+    assert len(results) > 0
+    urls = [r.url.lower() for r in results]
+    has_non_wiki = any("wikipedia.org" not in u and u.startswith("http") for u in urls)
+    assert has_non_wiki, f"Expected non-wikipedia web sources in results, got URLs: {urls}"
+
