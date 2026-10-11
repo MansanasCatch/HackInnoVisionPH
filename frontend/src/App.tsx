@@ -1160,18 +1160,50 @@ function Recommendations({ attempt, start, library }: { attempt: Attempt | null;
   </div>;
 }
 
-function ComparisonReport({ attempts, takeQuiz }: { attempts: Attempt[]; takeQuiz: () => void }) {
-  if (!attempts.length) return <div className="page report-page"><section className="workflow-hero"><div><Badge tone="blue">REPORT LEARNING</Badge><h2>Your learning insights will appear here.</h2><p>Complete a study session or quiz to begin a report based on your actual answers.</p></div></section><section className="empty-evidence panel"><div><Icon name="chart" size={28}/></div><h3>No learning evidence yet</h3><p>Calibrat8 won’t invent strengths, gaps, or weekly trends. Your first completed activity will start this report.</p><Button onClick={takeQuiz} icon="quiz">Take a quiz</Button></section></div>;
+function ComparisonReport({
+  attempts,
+  takeQuiz,
+  onboardingId,
+}: {
+  attempts: Attempt[];
+  takeQuiz: () => void;
+  onboardingId?: number | null;
+}) {
+  const [remoteSessions, setRemoteSessions] = useState<any[]>([]);
 
+  useEffect(() => {
+    if (onboardingId != null) {
+      api.listStudySessions(onboardingId)
+        .then(res => setRemoteSessions(res))
+        .catch(() => setRemoteSessions([]));
+    }
+  }, [onboardingId]);
+
+  const allAttempts: Attempt[] = [
+    ...attempts,
+    ...remoteSessions.map(s => ({
+      score: s.score ?? s.correct_items ?? 0,
+      total: s.total_items || 1,
+      completedAt: s.completed_at || s.started_at,
+      source: "quiz" as const,
+      concepts: [{ name: "Assessed concepts", correct: (s.score ?? 0) > 0 }],
+    })),
+  ];
+
+  if (!allAttempts.length) return <div className="page report-page"><section className="workflow-hero"><div><Badge tone="blue">REPORT LEARNING</Badge><h2>Your learning insights will appear here.</h2><p>Complete a study session or quiz to begin a report based on your actual answers.</p></div></section><section className="empty-evidence panel"><div><Icon name="chart" size={28}/></div><h3>No learning evidence yet</h3><p>Calibrat8 won’t invent strengths, gaps, or weekly trends. Your first completed activity will start this report.</p><Button onClick={takeQuiz} icon="quiz">Take a quiz</Button></section></div>;
+
+  const effectiveAttempts = attempts.length > 0 ? attempts : allAttempts;
   const conceptEvidence = new Map<string, { correct: number; total: number }>();
-  attempts.forEach(attempt => attempt.concepts.forEach(concept => {
+  effectiveAttempts.forEach(attempt => attempt.concepts.forEach(concept => {
     const evidence = conceptEvidence.get(concept.name) || { correct: 0, total: 0 };
     conceptEvidence.set(concept.name, { correct: evidence.correct + (concept.correct ? 1 : 0), total: evidence.total + 1 });
   }));
-  const concepts = Array.from(conceptEvidence, ([name, evidence]) => ({ name, ...evidence, accuracy: Math.round(evidence.correct / evidence.total * 100) }));
+  const concepts = Array.from(conceptEvidence, ([name, evidence]) => ({ name, ...evidence, accuracy: Math.round(evidence.correct / (evidence.total || 1) * 100) }));
   const strengths = concepts.filter(concept => concept.correct > concept.total - concept.correct).sort((a, b) => b.accuracy - a.accuracy);
   const needsPractice = concepts.filter(concept => concept.correct <= concept.total - concept.correct).sort((a, b) => a.accuracy - b.accuracy);
-  const overallScore = Math.round(attempts.reduce((sum, attempt) => sum + attempt.score, 0) / attempts.reduce((sum, attempt) => sum + attempt.total, 0) * 100);
+  const totalItems = effectiveAttempts.reduce((sum, attempt) => sum + attempt.total, 0);
+  const totalScore = effectiveAttempts.reduce((sum, attempt) => sum + attempt.score, 0);
+  const overallScore = totalItems > 0 ? Math.round((totalScore / totalItems) * 100) : 0;
   const currentWeek = new Date();
   currentWeek.setHours(0, 0, 0, 0);
   currentWeek.setDate(currentWeek.getDate() - ((currentWeek.getDay() + 6) % 7));
@@ -1180,7 +1212,7 @@ function ComparisonReport({ attempts, takeQuiz }: { attempts: Attempt[]; takeQui
     start.setDate(start.getDate() - (5 - index) * 7);
     const end = new Date(start);
     end.setDate(end.getDate() + 7);
-    const weekAttempts = attempts.filter(attempt => { const date = new Date(attempt.completedAt); return date >= start && date < end; });
+    const weekAttempts = effectiveAttempts.filter(attempt => { const date = new Date(attempt.completedAt); return date >= start && date < end; });
     const answered = weekAttempts.reduce((sum, attempt) => sum + attempt.total, 0);
     const correct = weekAttempts.reduce((sum, attempt) => sum + attempt.score, 0);
     return { label: start.toLocaleDateString(undefined, { month: "short", day: "numeric" }), sessions: weekAttempts.length, average: answered ? Math.round(correct / answered * 100) : 0 };
@@ -2596,7 +2628,7 @@ export default function App() {
       {page === "completion" && latestAttempt && <SessionCompletion attempt={latestAttempt} go={setPage}/>}
       {page === "knowledge" && <KnowledgeMap attempt={latestAttempt} recommendations={() => setPage("recommendations")} onboardingId={profile.onboardingId}/>}
       {page === "recommendations" && <Recommendations attempt={latestAttempt} start={() => setPage("focus")} library={() => setPage("library")}/>}
-      {page === "report" && <ComparisonReport attempts={attempts} takeQuiz={() => setPage("quiz")}/>}
+      {page === "report" && <ComparisonReport attempts={attempts} takeQuiz={() => setPage("quiz")} onboardingId={profile.onboardingId}/>}
       {page === "settings" && <Settings online={online} setOnline={setOnline} profile={profile} onModelChange={handleModelChange} editProfile={() => { setEditingProfile(true); setSetupOpen(true); }} onDeleteProfile={() => { setDeleteSettingsError(""); setDeleteConfirmFromSettings(true); }}/>}
       {page === "progress" && <Progress openCoach={() => setPage("coach")}/>}
       {page === "coach" && <Coach back={() => setPage("progress")}/>}
