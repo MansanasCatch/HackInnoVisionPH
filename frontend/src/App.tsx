@@ -14,6 +14,7 @@ import type {
   ModelSuggestionsResponse,
   OllamaModelsResponse,
   OnboardingProfile,
+  RAGSearchResponse,
 } from "./api/types";
 
 type Page =
@@ -1240,9 +1241,33 @@ function ContentIngestion({
   const [extractedData, setExtractedData] = useState<any | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
-  const [inputMethod, setInputMethod] = useState<"text" | "voice" | "camera" | "files">("text");
+  const [inputMethod, setInputMethod] = useState<"text" | "voice" | "camera" | "files" | "browse">("text");
   const [stage, setStage] = useState<"add" | "ready">("add");
   const [demoActionPrompt, setDemoActionPrompt] = useState<string>("");
+  const [ragLoading, setRagLoading] = useState(false);
+  const [ragResults, setRagResults] = useState<RAGSearchResponse | null>(null);
+  const [ragError, setRagError] = useState<string | null>(null);
+
+  const handleSearchOnline = async () => {
+    const query = topic.trim();
+    if (!query) {
+      setRagError("Please enter a topic to search online.");
+      return;
+    }
+    setRagLoading(true);
+    setRagError(null);
+    try {
+      const res = await api.searchAndRetrieve(query, 5);
+      setRagResults(res);
+      if (res.aggregated_context) {
+        setNotes(res.aggregated_context);
+      }
+    } catch (err) {
+      setRagError(describeApiError(err));
+    } finally {
+      setRagLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!demoActive) return;
@@ -1296,7 +1321,7 @@ function ContentIngestion({
     };
   }, [demoActive]);
 
-  const hasContent = topic.trim().length >= 2 && (notes.trim().length >= 20 || files.length > 0 || (extractedData && extractedData.files?.length > 0));
+  const hasContent = topic.trim().length >= 2 && (notes.trim().length >= 20 || files.length > 0 || (extractedData && extractedData.files?.length > 0) || (ragResults && (ragResults.retrieved_chunks?.length ?? 0) > 0));
   const wordCount = notes.trim() ? notes.trim().split(/\s+/).length : 0;
   const chunkCount = Math.max(1, Math.ceil(wordCount / 350) + files.length);
 
@@ -1358,7 +1383,7 @@ function ContentIngestion({
   return <div className="page ingestion-page">
     <button className="back-link" onClick={() => done("library")}>← Learning Resources</button>
     <section className="ingest-head">
-      <div><Badge tone="blue">NEW LEARNING SET</Badge><h2>What would you like to learn?</h2><p>Name the topic, then add free text, record your voice, use your camera, or upload a file.</p></div>
+      <div><Badge tone="blue">NEW LEARNING SET</Badge><h2>What would you like to learn?</h2><p>Name the topic, then add free text, record your voice, use your camera, upload a file, or browse online.</p></div>
       <div className="ingest-steps" aria-label="Ingestion progress">
         {["Topic & material", "Ready"].map((label, index) => <span className={index === 0 ? "active" : ""} key={label}><i>{index + 1}</i>{label}</span>)}
       </div>
@@ -1367,11 +1392,12 @@ function ContentIngestion({
     <div className="ingestion-grid">
       <section className="panel ingest-source">
         <label className="setup-field"><span>Topic</span><input value={topic} onChange={e => setTopic(e.target.value)} placeholder="For example: Cell division, budgeting, or Spanish basics"/></label>
-        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-[var(--line)] bg-[var(--mist)] p-2 sm:grid-cols-4" role="tablist" aria-label="Choose how to add learning material">
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-[var(--line)] bg-[var(--mist)] p-2 sm:grid-cols-5" role="tablist" aria-label="Choose how to add learning material">
           <button type="button" role="tab" aria-selected={inputMethod === "text"} aria-describedby="material-text-description" className={`group flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 motion-reduce:transition-none ${inputMethod === "text" ? "border-[var(--sage)] bg-[var(--sage)] text-white! shadow-md" : "border-transparent bg-[var(--paper)] text-[var(--muted)] hover:-translate-y-0.5 hover:border-[var(--sage)] hover:text-[var(--sage-dark)] hover:shadow-sm motion-reduce:hover:translate-y-0"}`} onClick={() => setInputMethod("text")}><span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-lg ${inputMethod === "text" ? "bg-white/15 text-white!" : "bg-[var(--sage-pale)] text-[var(--sage)]"}`}><Icon name="edit"/></span><span className="grid gap-0.5"><strong className="text-sm">Type it</strong><small id="material-text-description" className={`text-xs ${inputMethod === "text" ? "text-white" : "text-[var(--muted)]"}`}>Write a topic</small></span></button>
           <button type="button" role="tab" aria-selected={inputMethod === "voice"} aria-describedby="material-voice-description" className={`group flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 motion-reduce:transition-none ${inputMethod === "voice" ? "border-[var(--sage)] bg-[var(--sage)] text-white! shadow-md" : "border-transparent bg-[var(--paper)] text-[var(--muted)] hover:-translate-y-0.5 hover:border-[var(--sage)] hover:text-[var(--sage-dark)] hover:shadow-sm motion-reduce:hover:translate-y-0"}`} onClick={() => setInputMethod("voice")}><span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-lg ${inputMethod === "voice" ? "bg-white/15 text-white!" : "bg-[var(--peach-pale)] text-[var(--peach)]"}`}><Icon name="mic"/></span><span className="grid gap-0.5"><strong className="text-sm">Say it</strong><small id="material-voice-description" className={`text-xs ${inputMethod === "voice" ? "text-white" : "text-[var(--muted)]"}`}>Use your voice</small></span></button>
           <button type="button" role="tab" aria-selected={inputMethod === "camera"} aria-describedby="material-camera-description" className={`group flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 motion-reduce:transition-none ${inputMethod === "camera" ? "border-[var(--sage)] bg-[var(--sage)] text-white! shadow-md" : "border-transparent bg-[var(--paper)] text-[var(--muted)] hover:-translate-y-0.5 hover:border-[var(--sage)] hover:text-[var(--sage-dark)] hover:shadow-sm motion-reduce:hover:translate-y-0"}`} onClick={() => setInputMethod("camera")}><span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-lg ${inputMethod === "camera" ? "bg-white/15 text-white!" : "bg-[var(--blue-pale)] text-[var(--blue)]"}`}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5 10.5 3h3L15 5h3a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3Z"/><circle cx="12" cy="12.5" r="4"/></svg></span><span className="grid gap-0.5"><strong className="text-sm">Snap it</strong><small id="material-camera-description" className={`text-xs ${inputMethod === "camera" ? "text-white" : "text-[var(--muted)]"}`}>Take a photo</small></span></button>
           <button type="button" role="tab" aria-selected={inputMethod === "files"} aria-describedby="material-file-description" className={`group flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 motion-reduce:transition-none ${inputMethod === "files" ? "border-[var(--sage)] bg-[var(--sage)] text-white! shadow-md" : "border-transparent bg-[var(--paper)] text-[var(--muted)] hover:-translate-y-0.5 hover:border-[var(--sage)] hover:text-[var(--sage-dark)] hover:shadow-sm motion-reduce:hover:translate-y-0"}`} onClick={() => setInputMethod("files")}><span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-lg ${inputMethod === "files" ? "bg-white/15 text-white!" : "bg-[var(--sage-pale)] text-[var(--sage-dark)]"}`}><Icon name="upload"/></span><span className="grid gap-0.5"><strong className="text-sm">Add a file</strong><small id="material-file-description" className={`text-xs ${inputMethod === "files" ? "text-white" : "text-[var(--muted)]"}`}>Upload material</small></span></button>
+          <button type="button" role="tab" aria-selected={inputMethod === "browse"} aria-describedby="material-browse-description" className={`group flex min-h-20 items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 motion-reduce:transition-none ${inputMethod === "browse" ? "border-[var(--sage)] bg-[var(--sage)] text-white! shadow-md" : "border-transparent bg-[var(--paper)] text-[var(--muted)] hover:-translate-y-0.5 hover:border-[var(--sage)] hover:text-[var(--sage-dark)] hover:shadow-sm motion-reduce:hover:translate-y-0"}`} onClick={() => setInputMethod("browse")}><span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-lg ${inputMethod === "browse" ? "bg-white/15 text-white!" : "bg-[var(--blue-pale)] text-[var(--blue)]"}`}><Icon name="search"/></span><span className="grid gap-0.5"><strong className="text-sm">Browse online</strong><small id="material-browse-description" className={`text-xs ${inputMethod === "browse" ? "text-white" : "text-[var(--muted)]"}`}>Search with RAG</small></span></button>
         </div>
         {inputMethod === "text" && <div className="notes-input"><label htmlFor="material-notes">Free text</label><textarea id="material-notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder={"Paste notes, write an explanation, or add the information you want to study…\n\nTip: include enough detail for useful notes, flashcards, and questions."}/><span>{wordCount} words</span></div>}
         {inputMethod === "voice" && <label className="drop-zone compact-drop-zone">
@@ -1395,6 +1421,63 @@ function ContentIngestion({
           <p>PDF, DOCX, PPTX, TXT, Markdown, images, or audio</p>
           <small>Up to 6 files · PDF & text extracted directly to JSON by local backend</small>
         </label>}
+        {inputMethod === "browse" && (
+          <div className="browse-rag-section grid gap-3 p-4 rounded-xl border border-[var(--line)] bg-[var(--paper)]">
+            <div className="flex flex-col gap-1">
+              <strong className="text-sm">Online RAG Web Search & Retrieval</strong>
+              <p className="text-xs text-[var(--muted)]">Researches online knowledge (via SearXNG / Wikipedia fallback) and uses in-memory BM25 retrieval to rank passages into notes for offline practice set generation.</p>
+            </div>
+            <div className="flex gap-2 items-center">
+              <input
+                type="text"
+                className="flex-1 rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-sm"
+                placeholder="Enter topic to research online (e.g. Mitochondria & Cellular Respiration)..."
+                value={topic}
+                onChange={e => setTopic(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSearchOnline(); } }}
+              />
+              <Button
+                onClick={handleSearchOnline}
+                disabled={ragLoading || !topic.trim()}
+                icon="search"
+              >
+                {ragLoading ? "Searching..." : "Search online"}
+              </Button>
+            </div>
+            {ragLoading && (
+              <div className="p-3 text-sm text-[var(--sage-dark)] bg-[var(--sage-pale)] rounded-xl flex items-center gap-2">
+                <Icon name="spark" size={16}/>
+                <span>Searching online and ranking knowledge chunks with BM25…</span>
+              </div>
+            )}
+            {ragError && (
+              <div className="p-3 text-sm text-red-700 bg-red-50 rounded-xl">{ragError}</div>
+            )}
+            {ragResults && (
+              <div className="grid gap-2 mt-2">
+                <div className="flex justify-between items-center text-xs font-semibold text-[var(--sage-dark)]">
+                  <span>Retrieved {ragResults.total_chunks} chunks via {ragResults.search_engine}</span>
+                  <span className="text-[var(--muted)]">Status: 200 OK</span>
+                </div>
+                <div className="grid gap-2 max-h-56 overflow-y-auto">
+                  {ragResults.retrieved_chunks.map((chunk, idx) => (
+                    <div key={idx} className="p-2.5 rounded-lg border border-[var(--line)] bg-[var(--mist)] text-xs">
+                      <div className="flex justify-between items-center font-medium mb-1">
+                        <span className="text-[var(--forest)] truncate max-w-xs">{chunk.title || `Chunk #${idx + 1}`}</span>
+                        <span className="text-slate-500 font-mono text-[10px]">BM25: {chunk.score.toFixed(2)}</span>
+                      </div>
+                      <p className="text-slate-700 line-clamp-3">{chunk.text}</p>
+                      {chunk.url && <a href={chunk.url} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 underline block mt-1 truncate">{chunk.url}</a>}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 text-xs text-[var(--muted)]">
+                  Context populated into notes ({notes.length} characters) for 20–30 item practice set generation.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {extracting && <div className="p-3 text-sm text-[var(--sage-dark)] bg-[var(--sage-pale)] rounded-xl flex items-center gap-2 mt-3"><Icon name="spark" size={16}/><span>Extracting PDF and document content into JSON…</span></div>}
         {extractError && <div className="p-3 text-sm text-red-700 bg-red-50 rounded-xl mt-3">{extractError}</div>}
         {files.length > 0 && <div className="file-queue">{files.map((file, index) => <div key={`${file.name}-${index}`}><span className="file-type">{file.type.slice(0, 4)}</span><p><strong>{file.name}</strong><small>{file.size} · {extractedData ? "Extracted to JSON" : "Ready to add"}</small></p><button onClick={() => { setFiles(files.filter((_, fileIndex) => fileIndex !== index)); setRawFiles(rawFiles.filter((_, fileIndex) => fileIndex !== index)); }} aria-label={`Remove ${file.name}`}><Icon name="close" size={17}/></button></div>)}</div>}

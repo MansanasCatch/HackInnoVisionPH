@@ -333,3 +333,20 @@ export interface DocumentExtractResponse {
   files: ExtractedFileContent[];
 }
 
+
+export interface RAGChunkItem {
+  chunk_id: number;
+  title: string;
+  url: string;
+  content: string;
+  score: number;
+}
+
+export interface RAGSearchResponse {
+  success: boolean;
+  query: string;
+  source_engine: string;
+  total_sources: number;
+  retrieved_chunks: RAGChunkItem[];
+  aggregated_context: string;
+}

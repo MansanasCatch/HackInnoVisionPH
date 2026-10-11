@@ -156,6 +156,16 @@ export const api = {
     }
   },
 
+  /** POST /ai/search-and-retrieve — search online topic and return ranked RAG chunks. */
+  async searchAndRetrieve(topic: string, maxResults = 5, topK = 6): Promise<import("./types").RAGSearchResponse> {
+    const res = await request(`${BASE_URL}/ai/search-and-retrieve`, jsonInit("POST", {
+      topic,
+      max_results: maxResults,
+      top_k_chunks: topK,
+    }));
+    return handleResponse<import("./types").RAGSearchResponse>(res);
+  },
+
   // Onboarding
   async createOnboarding(data: OnboardingCreate): Promise<OnboardingProfile> {
     const res = await request(`${BASE_URL}/onboarding`, jsonInit("POST", data));
