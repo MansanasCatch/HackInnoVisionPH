@@ -184,3 +184,33 @@ class AIGenerateResponse(BaseModel):
         default_factory=list,
         description="User warnings regarding token budgeting, OCR notices, or truncation",
     )
+
+
+class RAGSearchRequest(BaseModel):
+    """Request model for topic web search and RAG retrieval."""
+
+    topic: str = Field(description="Search topic or question to research online")
+    max_results: int = Field(default=5, ge=1, le=10, description="Max search results to retrieve")
+    top_k_chunks: int = Field(default=6, ge=1, le=12, description="Top ranked chunks to return")
+
+
+class RAGChunkItem(BaseModel):
+    """Individual retrieved and scored chunk."""
+
+    chunk_id: int
+    title: str
+    url: str
+    content: str
+    score: float
+
+
+class RAGSearchResponse(BaseModel):
+    """Response model containing retrieved and ranked RAG chunks."""
+
+    success: bool = True
+    query: str
+    source_engine: str
+    total_sources: int
+    retrieved_chunks: list[RAGChunkItem] = Field(default_factory=list)
+    aggregated_context: str = ""
+

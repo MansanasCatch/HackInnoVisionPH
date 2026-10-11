@@ -10,6 +10,9 @@ from app.schemas.ai import (
     AIGenerateRequest,
     AIGenerateResponse,
     DocumentExtractResponse,
+    RAGChunkItem,
+    RAGSearchRequest,
+    RAGSearchResponse,
 )
 from app.services.file_parser import parse_uploaded_file
 
@@ -116,4 +119,88 @@ async def generate_with_files(
     )
 
     return service.generate(request=req, uploaded_files=uploaded_files)
+
+
+@router.post(
+    "/search-and-retrieve",
+    response_model=RAGSearchResponse,
+    summary="Search web and retrieve authoritative RAG chunks for topic",
+    description="Zero-dependency topic search using SearXNG or Wikipedia fallback with pure Python BM25 ranking.",
+)
+def search_and_retrieve(request: RAGSearchRequest) -> RAGSearchResponse:
+    """Execute topic search and extract top-ranked RAG passages."""
+    from app.services.rag_service import bm25_rank_chunks, chunk_text, search_web_for_topic
+
+    query = request.topic.strip()
+    if not query:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A non-empty search topic must be provided.",
+        )
+
+    # 1. Web research
+    web_results = search_web_for_topic(query, max_results=request.max_results)
+
+    # 2. Semantic chunking
+    raw_chunks: list[dict] = []
+    chunk_counter = 1
+    for res in web_results:
+        text_segments = chunk_text(res.content, chunk_size=250, overlap=40)
+        for segment in text_segments:
+            raw_chunks.append({
+                "chunk_id": chunk_counter,
+                "title": res.title,
+                "url": res.url,
+                "content": segment,
+            })
+            chunk_counter += 1
+
+    # 3. BM25 Ranking
+    scored_chunks = bm25_rank_chunks(query, raw_chunks, top_k=request.top_k_chunks)
+
+    # Fallback to direct snippet if ranking returned empty
+    if not scored_chunks and web_results:
+        scored_chunks = [
+            RAGChunkItem(
+                chunk_id=idx,
+                title=res.title,
+                url=res.url,
+                content=res.content[:600],
+                score=1.0,
+            )
+            for idx, res in enumerate(web_results[:request.top_k_chunks], 1)
+        ]
+
+    chunk_models = [
+        RAGChunkItem(
+            chunk_id=c.chunk_id,
+            title=c.title,
+            url=c.url,
+            content=c.content,
+            score=c.score,
+        )
+        if not isinstance(c, RAGChunkItem)
+        else c
+        for c in scored_chunks
+    ]
+
+    source_engine = (
+        "searxng"
+        if any("8080" in c.url for c in chunk_models)
+        else "wikipedia_fallback"
+    )
+    aggregated = "\n\n".join(
+        f"[{idx}] {c.title} ({c.url})\n{c.content}"
+        for idx, c in enumerate(chunk_models, 1)
+    )
+
+    return RAGSearchResponse(
+        success=True,
+        query=query,
+        source_engine=source_engine,
+        total_sources=len(web_results),
+        retrieved_chunks=chunk_models,
+        aggregated_context=aggregated,
+    )
+
 
