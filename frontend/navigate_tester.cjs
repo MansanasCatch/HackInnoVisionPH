@@ -3,7 +3,7 @@ const path = require('path');
 
 (async () => {
   const browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({ viewport: { width: 1400, height: 950 } });
   const page = await context.newPage();
 
   const artDir = 'C:\\Users\\Anastasya\\.gemini\\antigravity\\brain\\2526bd5f-5bed-492b-9050-697c76fd7c47';
@@ -34,22 +34,44 @@ const path = require('path');
     }
   }
 
-  // Take screenshot of Home page with the active Automation Tester panel
-  await page.screenshot({ path: path.join(artDir, 'tester_1_home_panel.png') });
-  console.log('Captured tester_1_home_panel.png');
+  // Close any popups by pressing Escape
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500);
 
-  // 3. Click "Run Live Evaluation Suite"
-  const runBtn = page.locator('button').filter({ hasText: /Run Live Evaluation Suite/i });
+  const panel = page.locator('section.panel').first();
+  await panel.scrollIntoViewIfNeeded();
+
+  // Screenshot 1: Initial panel view with 7 scenarios and live console
+  await page.screenshot({ path: path.join(artDir, 'live_tester_initial.png') });
+  console.log('Captured live_tester_initial.png');
+
+  // 3. Trigger "Run All Scenarios Live"
+  const runBtn = page.locator('[data-testid="run-all-scenarios"]');
   if (await runBtn.count() > 0) {
-    console.log('Triggering live evaluation suite...');
+    console.log('Triggering live execution of all 7 scenarios...');
     await runBtn.click();
-    // Wait for the full pipeline (health, extraction, ai gen, persistence, sessions, knowledge map)
-    await page.waitForSelector('text=Evaluation Complete', { timeout: 60000 }).catch(e => console.log('Timeout waiting for completion:', e.message));
-    await page.waitForTimeout(1000);
-    await page.screenshot({ path: path.join(artDir, 'tester_2_evaluation_passed.png') });
-    console.log('Captured tester_2_evaluation_passed.png');
+
+    // Give it 3.5 seconds to capture active streaming state
+    await page.waitForTimeout(3500);
+    await panel.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(artDir, 'live_tester_running.png') });
+    console.log('Captured live_tester_running.png');
+
+    // Wait for the full pipeline of 7 scenarios to complete
+    console.log('Waiting for full pipeline completion...');
+    await page.waitForSelector('text=Evaluation Complete', { timeout: 65000 }).catch(e => console.log('Timeout waiting for completion:', e.message));
+    await page.waitForTimeout(1500);
+
+    // Screenshot: Completed run with PASS badges and streaming logs
+    await panel.scrollIntoViewIfNeeded();
+    await panel.screenshot({ path: path.join(artDir, 'live_tester_panel_complete.png') });
+    await page.screenshot({ path: path.join(artDir, 'live_tester_complete.png') });
+    console.log('Captured live_tester_complete.png and live_tester_panel_complete.png');
   }
 
   await browser.close();
-  console.log('Automation Tester navigation complete!');
-})();
+  console.log('All live test scenarios completed successfully!');
+})().catch(err => {
+  console.error('Navigation script error:', err);
+  process.exit(1);
+});
