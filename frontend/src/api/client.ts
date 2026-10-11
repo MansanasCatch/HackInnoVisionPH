@@ -131,6 +131,31 @@ export const api = {
     return handleResponse<import("./types").AIGenerateResponse>(res);
   },
 
+  /** POST /ai/generate-with-files — multipart; files are optional (text_context alone works). */
+  async aiGenerateWithFiles(
+    data: import("./types").AIGenerateRequest & { files?: File[] },
+  ): Promise<import("./types").AIGenerateResponse> {
+    const { files, ...fields } = data;
+    const form = new FormData();
+    Object.entries(fields).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") form.append(key, String(value));
+    });
+    (files || []).forEach((file) => form.append("files", file));
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000); // local LLMs can be slow
+    try {
+      const res = await fetch(`${BASE_URL}/ai/generate-with-files`, {
+        method: "POST",
+        body: form,
+        signal: controller.signal,
+      });
+      return await handleResponse<import("./types").AIGenerateResponse>(res);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  },
+
   // Onboarding
   async createOnboarding(data: OnboardingCreate): Promise<OnboardingProfile> {
     const res = await request(`${BASE_URL}/onboarding`, jsonInit("POST", data));
@@ -267,6 +292,30 @@ export const api = {
     } finally {
       clearTimeout(timeoutId);
     }
+  },
+
+  async createLearningResource(payload: {
+    onboarding_id: number;
+    title: string;
+    subject?: string;
+    source_label?: string;
+  }): Promise<LearningResourceRead> {
+    const res = await request(`${BASE_URL}/learning-resources`, jsonInit("POST", payload));
+    return handleResponse<LearningResourceRead>(res);
+  },
+
+  async createResourceVersion(
+    resourceId: number,
+    payload: {
+      title?: string;
+      summary?: string;
+      content: any;
+      resource_types?: string[];
+      topics?: string[];
+    }
+  ): Promise<LearningResourceVersionRead> {
+    const res = await request(`${BASE_URL}/learning-resources/${resourceId}/versions`, jsonInit("POST", payload));
+    return handleResponse<LearningResourceVersionRead>(res);
   },
 
   async listLearningResources(onboardingId: number): Promise<LearningResourceRead[]> {

@@ -109,17 +109,26 @@ def build_study_prompts(
 ) -> tuple[str, str]:
     """Build grounded system and user prompts for educational study material generation."""
     system_prompt = custom_system_prompt or (
-        "You are an expert Educational Content Analyzer and Curriculum Study-Material Generator. "
-        "Your objective is to generate accurate, high-yield, structured study materials grounded "
-        "strictly in the uploaded source documents provided by the student or teacher.\n\n"
-        "STRICT GROUNDING RULES:\n"
-        "1. Ground every statement, definition, question, and answer in the "
-        "uploaded source documents.\n"
-        "2. Never hallucinate or invent unsupported facts.\n"
-        "3. If a concept or formula is missing from the source text, explicitly list it in "
-        "'content_gaps' rather than inventing missing information.\n"
-        "4. Return ONLY a valid, parseable JSON object matching the requested schema. "
-        "No markdown code blocks, no conversational preamble, no closing text."
+        "DOCUMENT-TO-QUIZ GENERATION ENGINE SYSTEM PROMPT:\n\n"
+        "1. ROLE AND RESPONSIBILITY:\n"
+        "You are an expert Educational Content Analyzer and structured assessment generation engine operating through a local Large Language Model (LLM).\n"
+        "Your purpose is to transform extracted document content into accurate, organized, pedagogically useful study reviewers, "
+        "quizzes, and exams that can be consumed by software, rendered in a frontend, graded, and stored.\n"
+        "Priorities in order: (1) Factual accuracy, (2) Faithfulness to source material, (3) Correct answer keys and grading rules, "
+        "(4) Valid JSON, (5) Appropriate difficulty, (6) Topic organization, (7) Frontend compatibility, (8) Efficient local token usage.\n\n"
+        "2. SOURCE AUTHORITY AND FACTUAL GROUNDING:\n"
+        "- The supplied source content is the PRIMARY AUTHORITY for all questions, answers, and summaries.\n"
+        "- Never hallucinate, invent formulas, definitions, dates, or answers unsupported by the text.\n"
+        "- Do not silently fill gaps using general knowledge. If an important topic or formula is absent, list it in 'content_gaps'.\n"
+        "- Preserve units, numbers, technical terminology, conditions, and exceptions.\n\n"
+        "3. QUESTION AND QUIZ RULES:\n"
+        "- MULTIPLE_CHOICE: 4 plausible options, only 1 correct, clear distractors, valid correct_answer.\n"
+        "- TRUE_FALSE: Test one clear unambiguous factual statement grounded in the source.\n"
+        "- IDENTIFICATION / SHORT_ANSWER: Clear conceptual question with accurate reference answer and explanation.\n"
+        "- EXAM / ESSAY: Rigorous, clear scoring criteria, accurate rubric, points defined.\n\n"
+        "4. OUTPUT FORMATTING:\n"
+        "- Return ONLY a single, valid parseable JSON object matching the requested schema.\n"
+        "- Do NOT include Markdown formatting (no ```json code blocks), no preambles, and no closing conversational text."
     )
 
     doc_blocks: list[str] = []
@@ -207,6 +216,102 @@ def build_study_prompts(
     return system_prompt, user_prompt
 
 
+_STOPWORDS = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "but",
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "from",
+        "with",
+        "by",
+        "as",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "it",
+        "its",
+        "this",
+        "that",
+        "these",
+        "those",
+        "which",
+        "who",
+        "whom",
+        "whose",
+        "what",
+        "when",
+        "where",
+        "why",
+        "how",
+        "into",
+        "than",
+        "then",
+        "so",
+        "such",
+        "their",
+        "there",
+        "they",
+        "them",
+        "he",
+        "she",
+        "his",
+        "her",
+        "we",
+        "our",
+        "you",
+        "your",
+        "not",
+        "no",
+        "can",
+        "could",
+        "may",
+        "might",
+        "will",
+        "would",
+        "should",
+        "also",
+        "more",
+        "most",
+        "other",
+        "some",
+        "any",
+        "each",
+        "both",
+        "between",
+        "during",
+        "after",
+        "before",
+        "about",
+        "over",
+        "under",
+    }
+)
+
+
+def _keyword(sentence: str) -> str | None:
+    """Pick the most informative word (longest non-stopword) to blank out."""
+    words = re.findall(r"[A-Za-z][A-Za-z\-']{3,}", sentence)
+    candidates = [w for w in words if w.lower() not in _STOPWORDS]
+    return max(candidates, key=len) if candidates else None
+
+
+def _blank(sentence: str, word: str) -> str:
+    return re.sub(rf"\b{re.escape(word)}\b", "_____", sentence, count=1)
+
+
 def build_offline_fallback_study_materials(
     topic: str | None,
     intent: Literal["question", "study_reviewer"],
@@ -214,92 +319,145 @@ def build_offline_fallback_study_materials(
     warning_msg: str,
     notes_context: str | None = None,
 ) -> StudyMaterialsResponse:
-    """Generate a deterministic, structured study materials tree from extracted document text."""
+    """Deterministic study pack built only from the source text (no model output needed).
+
+    Used when the local model is offline or cannot return valid JSON. Flashcards and quiz
+    questions are cloze items; quiz distractors are real terms from the same material.
+    """
     resolved_topic = infer_topic_from_documents(topic, documents)
 
-    # Concatenate text from documents and any typed notes
     source_parts = [doc.extracted_text for doc in documents]
     if notes_context and notes_context.strip():
         source_parts.append(notes_context)
     all_text = " ".join(source_parts).strip()
-    sentences = [s.strip() for s in re.split(r"[.\n]", all_text) if len(s.strip()) > 15]
+    seen: set[str] = set()
+    sentences: list[str] = []
+    for raw in re.split(r"(?<=[.!?])\s+|\n+", all_text):
+        s = raw.strip(" -*\t")
+        if len(s) > 15 and s.lower() not in seen:
+            seen.add(s.lower())
+            sentences.append(s.rstrip("."))
 
     sample_summary = (
         ". ".join(sentences[:3]) + "."
         if sentences
         else f"Study materials derived from uploaded documents on {resolved_topic}."
     )
-
     first_fact = sentences[0] if sentences else f"Introduction to {resolved_topic}"
-    second_fact = sentences[1] if len(sentences) > 1 else f"Core principles of {resolved_topic}"
-
     direct_ans = f"Based on the source text: {first_fact}." if intent == "question" else None
 
+    # Chunk sentences into themed notes / reviewer sections (3 sentences each, max 4 chunks)
+    chunks = [sentences[i : i + 3] for i in range(0, len(sentences), 3)][:4] or [[first_fact]]
+    key_notes = [
+        KeyNotesItem(
+            topic=resolved_topic if len(chunks) == 1 else f"{resolved_topic} - Part {n}",
+            notes=chunk,
+        )
+        for n, chunk in enumerate(chunks, start=1)
+    ]
+    sections = [
+        ReviewerSection(
+            title=item.topic,
+            content=". ".join(item.notes) + ".",
+            key_points=item.notes,
+        )
+        for item in key_notes
+    ]
+
+    # Cloze items: one per sentence that has a usable keyword
+    cloze: list[tuple[str, str, str]] = []  # (sentence, blanked, answer)
+    for s in sentences[:8]:
+        word = _keyword(s)
+        if word:
+            cloze.append((s, _blank(s, word), word))
+
+    flashcards = [
+        Flashcard(
+            question=f"Fill in the blank: {blanked}",
+            answer=answer,
+            topic=resolved_topic,
+            difficulty="easy",
+        )
+        for _, blanked, answer in cloze
+    ] or [
+        Flashcard(
+            question=f"What is the key takeaway regarding {resolved_topic}?",
+            answer=first_fact,
+            topic=resolved_topic,
+            difficulty="easy",
+        )
+    ]
+
+    quizzes: list[QuizQuestion] = []
+    all_terms = list(dict.fromkeys(a for _, _, a in cloze))
+    for n, (sentence, blanked, answer) in enumerate(cloze[:5]):
+        distractors = [t for t in all_terms if t.lower() != answer.lower()][:3]
+        if len(distractors) < 2:
+            continue
+        options = [*distractors, answer]
+        shift = n % len(options)  # deterministic rotation so the answer isn't always last
+        options = options[shift:] + options[:shift]
+        quizzes.append(
+            QuizQuestion(
+                type="multiple_choice",
+                question=f"Which term completes this statement? {blanked}",
+                options=options,
+                correct_answer=answer,
+                explanation=f"From your material: {sentence}.",
+                topic=resolved_topic,
+                difficulty="medium",
+            )
+        )
+    if not quizzes:
+        quizzes = [
+            QuizQuestion(
+                type="true_false",
+                question=f"True or false: {first_fact}.",
+                options=["True", "False"],
+                correct_answer="True",
+                explanation="Directly stated in your material.",
+                topic=resolved_topic,
+                difficulty="easy",
+            )
+        ]
+
+    exam_questions = [
+        ExamQuestion(
+            type="short_answer",
+            question=f"Explain, based on your material: {s}.",
+            correct_answer=s,
+            explanation="Synthesized from the uploaded lesson notes.",
+            topic=resolved_topic,
+            difficulty="hard",
+            points=5,
+        )
+        for s in (sentences[:3] or [first_fact])
+    ]
+
+    has_notes = bool(notes_context and notes_context.strip())
     return StudyMaterialsResponse(
         intent=intent,
         direct_answer=direct_ans,
         topic=resolved_topic,
-        source_summary=f"Extracted content from {len(documents)} uploaded file(s).",
-        reviewer=Reviewer(
-            title=f"Reviewer: {resolved_topic}",
-            sections=[
-                ReviewerSection(
-                    title=f"{resolved_topic} - Overview",
-                    content=sample_summary,
-                    key_points=[first_fact, second_fact],
-                )
-            ],
+        source_summary=(
+            f"Built from {len(documents)} uploaded file(s)"
+            f"{' and your typed notes' if has_notes else ''}."
         ),
+        reviewer=Reviewer(title=f"Reviewer: {resolved_topic}", sections=sections),
         summary=Summary(content=sample_summary),
-        key_notes=[
-            KeyNotesItem(
-                topic=resolved_topic,
-                notes=[first_fact, second_fact],
-            )
-        ],
-        flashcards=[
-            Flashcard(
-                question=f"What is the key takeaway regarding {resolved_topic}?",
-                answer=first_fact,
-                topic=resolved_topic,
-                difficulty="easy",
-            )
-        ],
-        quizzes=[
-            QuizQuestion(
-                type="multiple_choice",
-                question=f"Which fact regarding {resolved_topic} is supported by the document?",
-                options=[first_fact, "Unsupported statement A", "Unsupported statement B"],
-                correct_answer=first_fact,
-                explanation="Directly referenced in the uploaded document text.",
-                topic=resolved_topic,
-                difficulty="medium",
-            )
-        ],
+        key_notes=key_notes,
+        flashcards=flashcards,
+        quizzes=quizzes,
         exam=Exam(
             title=f"{resolved_topic} Examination",
-            questions=[
-                ExamQuestion(
-                    type="short_answer",
-                    question=(
-                        f"Explain the primary concept of '{resolved_topic}' "
-                        "described in the source."
-                    ),
-                    correct_answer=first_fact,
-                    explanation="Synthesized from the uploaded lesson notes.",
-                    topic=resolved_topic,
-                    difficulty="hard",
-                    points=5,
-                )
-            ],
-            total_questions=1,
-            total_points=5,
+            questions=exam_questions,
+            total_questions=len(exam_questions),
+            total_points=sum(q.points for q in exam_questions),
         ),
         source_coverage=SourceCoverage(
-            covered_topics=[resolved_topic],
+            covered_topics=[n.topic for n in key_notes],
             content_gaps=[
-                f"Note: {warning_msg}. Fallback structured study pack generated "
-                "directly from document text."
+                f"Note: {warning_msg}. Study pack generated directly from your material."
             ],
         ),
     )

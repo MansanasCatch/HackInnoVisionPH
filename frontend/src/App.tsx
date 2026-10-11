@@ -2,17 +2,18 @@ import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { api, ApiError, describeApiError } from "./api/client";
 import { mapAgeRangeToNumber, mapAgeToRange } from "./api/mappers";
 import StudyMode from "./StudyMode";
+import { asQuestion, buildTextContext, fromVersionToMaterialSet, MAX_CONTEXT_CHARS, toCards, toMaterialSet, toQuizItems, tutorReply } from "./materials";
+import type { CardItem, MaterialSet, QuizItem } from "./materials";
 import type {
   ActiveModelResponse,
   DeviceSpecsDetect,
   DeviceSpecsRead,
-  GeneratedLearningResource,
   KnowledgeMapResponse,
+  LearningResourceRead,
   ModelOption,
   ModelSuggestionsResponse,
   OllamaModelsResponse,
   OnboardingProfile,
-  StudyMaterialsResponse,
 } from "./api/types";
 
 type Page =
@@ -413,12 +414,13 @@ function Home({ go, online, openOffline, profile }: { go: (p: Page) => void; onl
 function Tutor({
   online,
   profile,
-  topic = "Quadratic equations",
+  material = null,
 }: {
   online: boolean;
   profile?: ProfileData;
-  topic?: string;
+  material?: MaterialSet | null;
 }) {
+  const topic = material?.topic || profile?.learningTopic || "your studies";
   const [messages, setMessages] = useState([
     {
       role: "user",
@@ -444,18 +446,22 @@ function Tutor({
 
     try {
       const res = await api.aiGenerate({
-        prompt: question,
+        prompt: asQuestion(question),
         topic,
         onboarding_id: profile?.onboardingId || undefined,
+        text_context: material?.materials.summary?.content?.slice(0, MAX_CONTEXT_CHARS) || undefined,
         system_prompt: "You are Calibrat8, an encouraging, clear, and fast AI tutor. Give concise, step-by-step explanations.",
       });
 
+      const notice = !res.is_ollama_online
+        ? "Local Ollama is offline — showing an answer built from your material."
+        : res.warnings[0];
       setMessages(m => [
         ...m,
         {
           role: "tutor",
-          text: res.response,
-          detail: `Model: ${res.model_used || "Local AI"} · ${res.execution_time_seconds.toFixed(1)}s`,
+          text: tutorReply(res),
+          detail: `Model: ${res.model_used || "Local AI"} · ${res.execution_time_seconds.toFixed(1)}s${notice ? ` · ${notice}` : ""}`,
         },
       ]);
     } catch (err: any) {
@@ -464,7 +470,7 @@ function Tutor({
         {
           role: "tutor",
           text: online
-            ? `I couldn't generate a response: ${err?.message || "Unknown error"}. Ensure Ollama is running.`
+            ? `I couldn't generate a response: ${describeApiError(err)}. Ensure the backend and Ollama are running.`
             : "Offline AI: You are offline. Saved study materials remain available.",
         },
       ]);
@@ -508,63 +514,10 @@ function Tutor({
   </div>;
 }
 
-<<<<<<< HEAD
-const initialTopics = ["Quadratic equations", "Cell division", "French Revolution", "Organic chemistry", "Essay structure"];
-const schedule = [
-  { topic: "Quadratic equations", activity: "Examples + practice", time: 30, tone: "coral" },
-  { topic: "Cell division", activity: "Summary + flashcards", time: 25, tone: "sage" },
-  { topic: "Break", activity: "Step away and reset", time: 10, tone: "neutral" },
-  { topic: "Organic chemistry", activity: "Key concepts + quiz", time: 25, tone: "blue" },
-  { topic: "French Revolution", activity: "Timeline review", time: 20, tone: "peach" },
-  { topic: "Essay structure", activity: "Recall + outline", time: 10, tone: "sage" },
-];
-
-function Planner({ start }: { start: () => void }) {
-  const [studyMode, setStudyMode] = useState<"Learn" | "Practice" | "Review">("Learn");
-  const [plannerStep, setPlannerStep] = useState(0);
-  const [selectedMaterials, setSelectedMaterials] = useState(["Notes Summary / Key Notes"]);
-  const modeDetails = [
-    { name: "Learn" as const, icon: "book" as IconName, copy: "Build understanding with key notes, explanations, and guided examples." },
-    { name: "Practice" as const, icon: "quiz" as IconName, copy: "Answer targeted questions and get immediate feedback on each concept." },
-    { name: "Review" as const, icon: "cards" as IconName, copy: "Refresh earlier material with summaries, recall cards, and quick checks." },
-  ];
-  const materialOptions = [
-    { name: "Notes Summary / Key Notes", icon: "book" as IconName, copy: "Load concise summaries, definitions, and important takeaways.", time: 10, tone: "sage" },
-    { name: "Flashcards", icon: "cards" as IconName, copy: "Load question-and-answer cards for active recall.", time: 10, tone: "coral" },
-    { name: "Quizzes / Exam / Reviewer", icon: "quiz" as IconName, copy: "Load practice questions, reviewer items, and answer checks.", time: 15, tone: "blue" },
-  ];
-  const loadedMaterials = materialOptions.filter(material => selectedMaterials.includes(material.name));
-  const totalMinutes = loadedMaterials.reduce((total, material) => total + material.time, 0);
-  const toggleMaterial = (material: string) => setSelectedMaterials(current => current.includes(material) ? current.filter(item => item !== material) : [...current, material]);
-  const stepTitles = ["Choose your study mode", "Choose learning materials", "Review your session"];
-  return <div className="page planner-page">
-    <section className="planner-head"><div><Badge tone="peach">STUDY MODE</Badge><h2>{stepTitles[plannerStep]}</h2><p>Complete one simple step at a time.</p></div>{plannerStep === 2 && <div className="duration-card"><Icon name="clock"/><span><small>ESTIMATED TIME</small><strong>{totalMinutes} min</strong></span></div>}</section>
-    <section className="panel topic-panel">
-      <div className="section-heading"><div><p className="eyebrow">STEP {plannerStep + 1} OF 3</p><h3>{stepTitles[plannerStep]}</h3></div><Badge tone="neutral">{Math.round((plannerStep + 1) / 3 * 100)}%</Badge></div>
-      <div className="onboarding-progress" aria-label={`Study setup step ${plannerStep + 1} of 3`}><span style={{ width: `${(plannerStep + 1) / 3 * 100}%` }}/></div>
-    </section>
-
-    {plannerStep === 0 && <section className="panel topic-panel section-block">
-      <div className="section-heading"><div><p className="eyebrow">CHOOSE ONE</p><h3>How do you want to study?</h3></div><Badge tone="neutral">{studyMode}</Badge></div>
-      <div className="learning-styles">{modeDetails.map(mode => <button key={mode.name} className={studyMode === mode.name ? "selected" : ""} onClick={() => setStudyMode(mode.name)} aria-pressed={studyMode === mode.name}><span><Icon name={mode.icon}/></span><div><strong>{mode.name}</strong><p>{mode.copy}</p></div><i>{studyMode === mode.name && <Icon name="check" size={15}/>}</i></button>)}</div>
-      <div className="setup-actions"><Button onClick={() => setPlannerStep(1)} icon="arrow">Choose topics</Button></div>
-    </section>}
-
-    {plannerStep === 1 && <section className="panel topic-panel section-block">
-      <div className="section-heading"><div><p className="eyebrow">LOAD FOR STUDY</p><h3>Which materials do you want?</h3></div><Badge tone="neutral">{selectedMaterials.length} selected</Badge></div>
-      <p className="muted">Choose one or more saved resources to use in this session.</p>
-      <div className="learning-styles">{materialOptions.map(material => <button key={material.name} className={selectedMaterials.includes(material.name) ? "selected" : ""} onClick={() => toggleMaterial(material.name)} aria-pressed={selectedMaterials.includes(material.name)}><span><Icon name={material.icon}/></span><div><strong>{material.name}</strong><p>{material.copy}</p></div><i>{selectedMaterials.includes(material.name) && <Icon name="check" size={15}/>}</i></button>)}</div>
-      <div className="setup-actions"><Button variant="secondary" onClick={() => setPlannerStep(0)}>Back</Button><Button disabled={selectedMaterials.length === 0} onClick={() => setPlannerStep(2)} icon="arrow">Review plan</Button></div>
-    </section>}
-
-    {plannerStep === 2 && <section className="panel schedule-panel section-block">
-      <div className="section-heading"><div><p className="eyebrow">{studyMode.toUpperCase()} SESSION</p><h3>Materials ready to load</h3></div><span className="time-total"><Icon name="clock" size={16}/> {totalMinutes} min</span></div>
-      <div className="schedule-list">{loadedMaterials.map((material, index) => <div className="schedule-item" key={material.name}><span className={`schedule-index ${material.tone}`}><Icon name={material.icon} size={15}/></span><span><strong>{material.name}</strong><small>{material.copy}</small></span><div className="schedule-time"><strong>{material.time}</strong><small>min</small></div><Icon name="check" size={17}/></div>)}</div>
-      <div className="planner-reason"><Icon name="spark"/><p><strong>{studyMode} mode selected.</strong> Study Mode will load only the {selectedMaterials.length === 1 ? "resource" : "resources"} you selected.</p></div>
-      <div className="setup-actions"><Button variant="secondary" onClick={() => setPlannerStep(1)}>Back</Button><Button onClick={start} icon="play">Start {studyMode.toLowerCase()} session</Button></div>
-    </section>}
-  </div>;
-}
+type FocusStep =
+  | { kind: "concept"; title: string; body: string }
+  | { kind: "card"; card: CardItem }
+  | { kind: "quiz"; quiz: QuizItem };
 
 function Focus({
   exit,
@@ -572,57 +525,53 @@ function Focus({
   material,
 }: {
   exit: () => void;
-  completeSession: (score: number, total: number) => void;
-  material: GeneratedLearningResource | null;
+  completeSession: (score: number, total: number, concepts: { name: string; correct: boolean }[]) => void;
+  material: MaterialSet | null;
 }) {
   const [step, setStep] = useState(0);
   const [paused, setPaused] = useState(false);
   const [flipped, setFlipped] = useState(false);
-  const [answer, setAnswer] = useState<number | null>(null);
+  const [picked, setPicked] = useState<Record<number, number>>({});
 
-  const content = (material?.version.content || {}) as Partial<StudyMaterialsResponse>;
-  const topicTitle = material?.resource.topic || "Quadratic equations";
+  const steps: FocusStep[] = material
+    ? [
+        { kind: "concept", title: material.topic, body: material.materials.direct_answer || material.materials.summary?.content || material.materials.source_summary || "Review the key ideas, then test your recall." },
+        ...toCards(material.materials).slice(0, 3).map(card => ({ kind: "card" as const, card })),
+        ...toQuizItems(material.materials).slice(0, 3).map(quiz => ({ kind: "quiz" as const, quiz })),
+      ]
+    : [
+        { kind: "concept", title: "Undo each operation in reverse order.", body: "To isolate x, treat the equation like a wrapped gift. Remove the outermost layer first, and do the same thing to both sides." },
+        { kind: "card", card: { front: "How do you keep an equation balanced?", back: "Apply the inverse operation to both sides.", concept: "Inverse operations" } },
+        { kind: "quiz", quiz: { question: "What is the first step to solve 3x − 4 = 11?", options: ["Divide both sides by 3", "Add 4 to both sides", "Subtract 11 from both sides"], answer: 1, concept: "Inverse operations", explanation: "Adding 4 to both sides removes the −4 while keeping the equation balanced." } },
+      ];
+  const current = steps[step];
+  const total = steps.length;
+  const isLast = step === total - 1;
+  const answered = picked[step];
+  const quizzes = steps.map((s, i) => ({ s, i })).filter((x): x is { s: Extract<FocusStep, { kind: "quiz" }>; i: number } => x.s.kind === "quiz");
+  const quizBlocked = current.kind === "quiz" && answered === undefined;
+  const badge = current.kind === "concept" ? "CONCEPT" : current.kind === "card" ? "FLASHCARD" : "QUICK CHECK";
 
-  // Dynamic card content
-  const cardData = content.flashcards && content.flashcards.length > 0
-    ? content.flashcards[0]
-    : { front: "How do you keep an equation balanced?", back: "Apply the inverse operation to both sides." };
-
-  // Dynamic quiz content
-  const quizData = content.quizzes && content.quizzes.length > 0
-    ? {
-        question: content.quizzes[0].question,
-        options: content.quizzes[0].options || ["Option A", "Option B", "Option C"],
-        correctIdx: (content.quizzes[0].options || []).indexOf(content.quizzes[0].correct_answer) >= 0
-          ? (content.quizzes[0].options || []).indexOf(content.quizzes[0].correct_answer)
-          : 1,
-        explanation: content.quizzes[0].explanation || `Correct: ${content.quizzes[0].correct_answer}`,
-        concept: content.quizzes[0].topic || "Core Concept",
-      }
-    : {
-        question: "What is the first step to solve 3x − 4 = 11?",
-        options: ["Divide both sides by 3", "Add 4 to both sides", "Subtract 11 from both sides"],
-        correctIdx: 1,
-        explanation: "Adding 4 to both sides removes the −4 while keeping the equation balanced.",
-        concept: "Inverse operations",
-      };
-
-  const noteSummary = content.summary?.content || content.direct_answer || "Undo each operation in reverse order. To isolate x, treat the equation like a wrapped gift: remove the outermost layer first.";
+  const go = (next: number) => { setFlipped(false); setStep(next); };
+  const finishSession = () => {
+    if (!quizzes.length) { exit(); return; }
+    const concepts = quizzes.map(({ s, i }) => ({ name: s.quiz.concept, correct: picked[i] === s.quiz.answer }));
+    const score = concepts.filter(c => c.correct).length;
+    completeSession(score, concepts.length, concepts);
+  };
 
   return <div className="focus-shell">
-    <header className="focus-header"><button className="brand" onClick={exit}><span className="brand-mark"><Icon name="spark" size={18}/></span><span>Calibrat8</span></button><div className="focus-progress"><span><strong>{topicTitle}</strong><small>Activity {step + 1} of 3 · {25 - step * 8} min remaining</small></span><div><i style={{ width: `${(step + 1) * 33}%` }}/></div></div><Button onClick={() => setPaused(!paused)} variant="secondary" icon={paused ? "play" : "pause"}>{paused ? "Resume" : "Pause"}</Button></header>
-    <main className="focus-main" aria-label={`Study activity ${step + 1} of 3`}>
+    <header className="focus-header"><button className="brand" onClick={exit}><span className="brand-mark"><Icon name="spark" size={18}/></span><span>Calibrat8</span></button><div className="focus-progress"><span><strong>{material?.topic || "Quadratic equations"}</strong><small>Activity {step + 1} of {total}</small></span><div><i style={{ width: `${((step + 1) / total) * 100}%` }}/></div></div><Button onClick={() => setPaused(!paused)} variant="secondary" icon={paused ? "play" : "pause"}>{paused ? "Resume" : "Pause"}</Button></header>
+    <main className="focus-main" aria-label={`Study activity ${step + 1} of ${total}`}>
       {paused ? <div className="pause-state"><div className="complete-mark"><Icon name="pause"/></div><h2>Session paused.</h2><p>Take the time you need. Your place is saved on this device.</p><Button onClick={() => setPaused(false)} icon="play">Resume when ready</Button></div> :
-      <><div className="focus-kicker"><span>ACTIVITY {step + 1}</span><div className="flex items-center gap-2"><span className="flex gap-1.5" aria-label={`${step + 1} of 3 activities complete`}>{[0, 1, 2].map(index => <i key={index} aria-hidden="true" className={`block h-1.5 rounded-full transition-all duration-300 motion-reduce:transition-none ${index === step ? "w-6 bg-[var(--sage)]" : index < step ? "w-1.5 bg-[var(--blue)]" : "w-1.5 bg-[var(--line)]"}`}/>)}</span><Badge tone="blue">{step === 0 ? "CONCEPT" : step === 1 ? "FLASHCARD" : "QUICK CHECK"}</Badge></div></div>
-      {step === 0 && <article className="learning-card transition-transform duration-300 hover:-translate-y-0.5 motion-reduce:transition-none"><p className="eyebrow">THE KEY IDEA</p><h2>{topicTitle}</h2><p>{noteSummary}</p><div className="equation group"><span className="rounded-lg px-2 py-1 transition-colors group-hover:bg-[var(--peach-pale)]">Key Step 1</span><Icon name="arrow"/><span className="rounded-lg px-2 py-1 transition-colors group-hover:bg-[var(--blue-pale)]">Key Step 2</span><Icon name="arrow"/><span className="rounded-lg bg-[var(--sage-pale)] px-2 py-1 text-[var(--sage-dark)] transition-transform group-hover:scale-110 motion-reduce:transition-none">Mastery</span></div><div className="callout"><Icon name="spark"/><p><strong>Focus tip:</strong> Understand the core concept first before testing recall.</p></div></article>}
-      {step === 1 && <button type="button" aria-pressed={flipped} aria-label={`${flipped ? "Answer shown" : "Question shown"}. ${flipped ? cardData.back : cardData.front}`} className={`flashcard group ${flipped ? "flipped" : ""} focus-visible:ring-4 focus-visible:ring-[var(--sage-pale)]`} onClick={() => setFlipped(!flipped)}><span className="eyebrow">{flipped ? "ANSWER REVEALED" : "TAP TO REVEAL"}</span><strong className="transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none">{flipped ? cardData.back : cardData.front}</strong><small>{flipped ? "Tap again to review the question." : "Think about the core concept before flipping."}</small><span aria-hidden="true" className={`grid size-10 place-items-center rounded-full transition-transform duration-300 group-hover:rotate-180 motion-reduce:transition-none ${flipped ? "bg-white/15 text-white" : "bg-[var(--sage-pale)] text-[var(--sage)]"}`}><Icon name="more"/></span></button>}
-      {step === 2 && <article className="learning-card quiz-card"><p className="eyebrow">TRY THIS</p><h2>{quizData.question}</h2>{quizData.options.map((x, i) => <button type="button" key={x} className={`answer-option group transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--sage)]! hover:bg-[var(--mist)]! hover:shadow-sm active:scale-95 motion-reduce:transition-none ${answer === i ? "selected" : ""}`} onClick={() => setAnswer(i)} aria-pressed={answer === i} aria-label={`${String.fromCharCode(65 + i)}. ${x}${answer === i ? ", selected" : ""}`}><span className="transition-transform duration-200 group-hover:scale-110 motion-reduce:transition-none">{String.fromCharCode(65 + i)}</span>{x}</button>)}{answer !== null && <div className={`callout mt-4 ${answer === quizData.correctIdx ? "" : "bg-[var(--peach-pale)]! text-[var(--peach)]!"}`} role="status" aria-live="polite"><Icon name={answer === quizData.correctIdx ? "check" : "spark"}/><p><strong>{answer === quizData.correctIdx ? "That’s it." : "Good try—let's review."}</strong> {quizData.explanation}</p></div>}</article>}
-      <div className="focus-footer"><p aria-live="polite">{step === 0 ? "Review the key concept, then continue when you’re ready." : step === 1 ? flipped ? "Nice recall. Review the question or move on." : "Flip the card and test your memory." : answer === null ? "Choose your answer." : answer === quizData.correctIdx ? "Correct—ready to finish." : "You can try another answer or finish to review."}</p><div className="flex gap-2">{step > 0 && <Button variant="secondary" onClick={() => { if (step === 1) setFlipped(false); if (step === 2) setAnswer(null); setStep(step - 1); }}>Back</Button>}<Button disabled={step === 2 && answer === null} onClick={() => { if (step === 2) completeSession(answer === quizData.correctIdx ? 1 : 0, 1); else { if (step === 0) setFlipped(false); if (step === 1) setAnswer(null); setStep(step + 1); } }} icon="arrow">{step === 2 ? "Finish session" : "Next activity"}</Button></div></div></>}
+      <><div className="focus-kicker"><span>ACTIVITY {step + 1}</span><div className="flex items-center gap-2"><span className="flex gap-1.5" aria-label={`${step + 1} of ${total} activities`}>{steps.map((_, index) => <i key={index} aria-hidden="true" className={`block h-1.5 rounded-full transition-all duration-300 motion-reduce:transition-none ${index === step ? "w-6 bg-[var(--sage)]" : index < step ? "w-1.5 bg-[var(--blue)]" : "w-1.5 bg-[var(--line)]"}`}/>)}</span><Badge tone="blue">{badge}</Badge></div></div>
+      {current.kind === "concept" && <article className="learning-card"><p className="eyebrow">THE KEY IDEA</p><h2>{current.title}</h2><p style={{ whiteSpace: "pre-wrap" }}>{current.body}</p><div className="callout"><Icon name="spark"/><p><strong>Focus tip:</strong> understand the idea first, then test your recall.</p></div></article>}
+      {current.kind === "card" && <button type="button" aria-pressed={flipped} aria-label={`${flipped ? "Answer shown" : "Question shown"}. ${flipped ? current.card.back : current.card.front}`} className={`flashcard group ${flipped ? "flipped" : ""} focus-visible:ring-4 focus-visible:ring-[var(--sage-pale)]`} onClick={() => setFlipped(!flipped)}><span className="eyebrow">{flipped ? "ANSWER REVEALED" : "TAP TO REVEAL"}</span><strong>{flipped ? current.card.back : current.card.front}</strong><small>{flipped ? "Tap again to review the question." : "Think before you flip."}</small><span aria-hidden="true" className={`grid size-10 place-items-center rounded-full ${flipped ? "bg-white/15 text-white" : "bg-[var(--sage-pale)] text-[var(--sage)]"}`}><Icon name="more"/></span></button>}
+      {current.kind === "quiz" && <article className="learning-card quiz-card"><p className="eyebrow">TRY THIS</p><h2>{current.quiz.question}</h2>{current.quiz.options.map((x, i) => <button type="button" key={`${i}-${x}`} className={`answer-option group transition-all duration-200 hover:-translate-y-0.5 active:scale-95 motion-reduce:transition-none ${answered === i ? "selected" : ""}`} onClick={() => setPicked({ ...picked, [step]: i })} aria-pressed={answered === i} aria-label={`${String.fromCharCode(65 + i)}. ${x}${answered === i ? ", selected" : ""}`}><span>{String.fromCharCode(65 + i)}</span>{x}</button>)}{answered !== undefined && <div className={`callout mt-4 ${answered === current.quiz.answer ? "" : "bg-[var(--peach-pale)]! text-[var(--peach)]!"}`} role="status" aria-live="polite"><Icon name={answered === current.quiz.answer ? "check" : "spark"}/><p><strong>{answered === current.quiz.answer ? "That’s it." : "Good try—let’s review."}</strong> {current.quiz.explanation}</p></div>}</article>}
+      <div className="focus-footer"><p aria-live="polite">{current.kind === "concept" ? "Review the key idea, then continue when you’re ready." : current.kind === "card" ? (flipped ? "Nice recall. Review the question or move on." : "Flip the card and test your memory.") : answered === undefined ? "Choose your answer." : answered === current.quiz.answer ? "Correct—keep going." : "You can try another answer or continue."}</p><div className="flex gap-2">{step > 0 && <Button variant="secondary" onClick={() => go(step - 1)}>Back</Button>}<Button disabled={quizBlocked} onClick={() => isLast ? finishSession() : go(step + 1)} icon="arrow">{isLast ? "Finish session" : "Next activity"}</Button></div></div></>}
     </main>
   </div>;
 }
-=======
->>>>>>> origin/main
 
 type IngestedFile = { name: string; size: string; type: string };
 type Attempt = {
@@ -784,7 +733,6 @@ function ContentIngestion({
 }
 
 function Generation({
-  online,
   profile,
   preparedMaterial,
   finish,
@@ -796,45 +744,92 @@ function Generation({
   preparedMaterial: PreparedMaterial | null;
   finish: () => void;
   back: () => void;
-  onResourceGenerated: (resource: GeneratedLearningResource) => void;
+  onResourceGenerated: (material: MaterialSet) => void;
 }) {
   const [selected, setSelected] = useState(["notes", "cards", "quiz"]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
-  const [prepared, setPrepared] = useState(false);
-  const [result, setResult] = useState<GeneratedLearningResource | null>(null);
+  const [result, setResult] = useState<MaterialSet | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!isGenerating) return;
+    setElapsed(0);
+    const timer = window.setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [isGenerating]);
 
   const resources = [
     { id: "notes", icon: "book" as IconName, title: "Key notes", copy: "Important concepts, definitions, and takeaways" },
     { id: "cards", icon: "cards" as IconName, title: "Flashcards", copy: "Short question-and-answer recall cards" },
     { id: "quiz", icon: "quiz" as IconName, title: "Quiz & reviewer", copy: "Practice questions with explanations" },
   ];
+  const wording: Record<string, string> = { notes: "key notes", cards: "flashcards", quiz: "a practice quiz with explanations" };
   const toggle = (id: string) => setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  const topic = preparedMaterial?.topic || profile.learningTopic || "Study material";
+  const hasSource = !!preparedMaterial && (preparedMaterial.notes.trim().length > 0 || preparedMaterial.files.length > 0);
 
   const handleGenerate = async () => {
+    if (!preparedMaterial) return;
     setIsGenerating(true);
     setGenerationError(null);
     try {
-      const topic = preparedMaterial?.topic || profile.learningTopic || "Study Material";
-      const notes = preparedMaterial?.notes || "";
-      const files = preparedMaterial?.files || [];
-      const onboardingId = profile.onboardingId || 1;
+      const textContext = buildTextContext(preparedMaterial.notes, preparedMaterial.extractedData);
+      // Files already parsed by /ai/extract-text are sent as text; only unparsed ones are uploaded.
+      const parsedNames = new Set<string>((preparedMaterial.extractedData?.files || []).filter((f: { extracted_text?: string }) => f.extracted_text?.trim()).map((f: { filename: string }) => f.filename));
+      const uploads = preparedMaterial.files.filter(file => !parsedNames.has(file.name));
 
-      const generated = await api.generateLearningResource({
-        onboarding_id: onboardingId,
+      const res = await api.aiGenerateWithFiles({
+        prompt: `Create study materials about ${topic}, including ${selected.map(id => wording[id]).join(", ")}.`,
         topic,
-        notes,
-        resource_types: selected,
-        files,
+        onboarding_id: profile.onboardingId || undefined,
+        text_context: textContext || undefined,
+        files: uploads,
       });
+      let material = toMaterialSet(res, topic);
+      if (!material) throw new Error("The model returned no study materials. Try again with more detailed notes.");
 
-      setResult(generated);
-      setPrepared(true);
-      onResourceGenerated(generated);
+      if (profile.onboardingId != null) {
+        try {
+          const sourceLabel = preparedMaterial.files.map(f => f.name).join(", ") || "Typed notes";
+          const resourceRecord = await api.createLearningResource({
+            onboarding_id: profile.onboardingId,
+            title: (topic || material.materials.topic).slice(0, 160),
+            subject: topic.slice(0, 100),
+            source_label: sourceLabel.slice(0, 255),
+          });
+
+          const topicsList: string[] = [];
+          for (const name of [
+            ...(material.materials.key_notes || []).map(n => n.topic),
+            ...(material.materials.source_coverage?.covered_topics || []),
+          ]) {
+            if (name && !topicsList.includes(name)) topicsList.push(name);
+          }
+
+          const versionRecord = await api.createResourceVersion(resourceRecord.id, {
+            title: (topic || material.materials.topic).slice(0, 160),
+            summary: material.materials.summary?.content || "",
+            content: material.materials,
+            resource_types: selected,
+            topics: topicsList,
+          });
+
+          material = {
+            ...material,
+            resourceId: resourceRecord.id,
+            versionId: versionRecord.id,
+            onboardingId: profile.onboardingId,
+          };
+        } catch (persistErr) {
+          console.warn("Could not persist learning resource to backend database:", persistErr);
+        }
+      }
+
+      setResult(material);
+      onResourceGenerated(material);
     } catch (err) {
       setGenerationError(describeApiError(err));
-      // Graceful fallback to prototype preview
-      setPrepared(true);
     } finally {
       setIsGenerating(false);
     }
@@ -845,61 +840,148 @@ function Generation({
     <section className="workflow-hero">
       <div>
         <Badge tone="peach">{result ? "GENERATION COMPLETE" : "AI LEARNING GENERATOR"}</Badge>
-        <h2>{result ? `Learning materials prepared for “${preparedMaterial?.topic || profile.learningTopic || 'Your Topic'}”` : "What should Calibrat8 prepare?"}</h2>
-        <p>{result ? `Generated with ${result.generation.model_used || profile.modelTag} in ${result.generation.execution_time_seconds.toFixed(1)}s` : "Select the learning resources you want. Calibrat8 grounds all items directly in your notes and files."}</p>
+        <h2>{result ? `Your materials for “${result.topic}” are ready` : "What should Calibrat8 prepare?"}</h2>
+        <p>{result ? `Generated with ${result.model} in ${result.seconds.toFixed(1)}s` : "Select the learning resources you want. Everything is grounded in the notes and files you added."}</p>
       </div>
       <Calibrat8 size="medium"/>
     </section>
     <div className="generation-layout">
       <section className="panel generation-card">
         <div className="section-heading"><div><p className="eyebrow">LEARNING RESOURCES</p><h3>Choose one or more</h3></div><Badge tone="neutral">{selected.length} selected</Badge></div>
-        <div className="resource-select-list">{resources.map(resource => <button key={resource.id} className={selected.includes(resource.id) ? "selected" : ""} onClick={() => toggle(resource.id)} aria-pressed={selected.includes(resource.id)}>
+        <div className="resource-select-list">{resources.map(resource => <button key={resource.id} className={selected.includes(resource.id) ? "selected" : ""} onClick={() => toggle(resource.id)} aria-pressed={selected.includes(resource.id)} disabled={isGenerating || !!result}>
           <span><Icon name={resource.icon}/></span><span><strong>{resource.title}</strong><small>{resource.copy}</small></span><i>{selected.includes(resource.id) && <Icon name="check" size={15}/>}</i>
         </button>)}</div>
-        {generationError && <div className="status-callout warning"><Icon name="spark"/><p><strong>Backend Notice:</strong><br/>{generationError}</p></div>}
-        {isGenerating && <div className="p-4 rounded-xl bg-[var(--sage-pale)] text-[var(--sage-dark)] flex items-center gap-3"><Icon name="spark" size={18}/><span>Generating learning materials with local AI…</span></div>}
-        {prepared && <div className="generation-progress" aria-live="polite">{resources.filter(item => selected.includes(item.id)).map(item => <div key={item.id}><span><Icon name="check" size={15}/></span><p><strong>{item.title}</strong><small>{result ? `Ready from ${preparedMaterial?.topic || 'your notes'}` : "Sample resource prepared"}</small></p><Badge>Ready</Badge></div>)}</div>}
+        {!hasSource && <div className="status-callout warning"><Icon name="spark"/><p><strong>No material added yet.</strong><br/>Go back and add notes or upload a file first.</p></div>}
+        {generationError && <div className="status-callout warning" role="alert"><Icon name="spark"/><p><strong>Couldn't generate materials</strong><br/>{generationError}</p></div>}
+        {isGenerating && <div className="p-4 rounded-xl bg-[var(--sage-pale)] text-[var(--sage-dark)] flex items-center gap-3" aria-live="polite"><Icon name="spark" size={18}/><span>Generating with your local AI model… {elapsed}s <small>(larger models can take a minute)</small></span></div>}
+        {result && <MaterialNotice material={result}/>}
+        {result && <div className="generation-progress" aria-live="polite">{resources.filter(item => selected.includes(item.id)).map(item => {
+          const count = item.id === "notes" ? (result.materials.key_notes.length || result.materials.reviewer.sections.length) : item.id === "cards" ? toCards(result.materials).length : toQuizItems(result.materials).length;
+          return <div key={item.id}><span><Icon name="check" size={15}/></span><p><strong>{item.title}</strong><small>{count} item{count === 1 ? "" : "s"} generated from {topic}</small></p><Badge>{count ? "Ready" : "Empty"}</Badge></div>;
+        })}</div>}
         <div className="generation-actions">
-          {!prepared ? <Button disabled={selected.length === 0 || isGenerating} onClick={handleGenerate} icon="spark">{isGenerating ? "Generating..." : "Generate resources"}</Button> : <Button onClick={finish} icon="arrow">Open learning set</Button>}
+          {!result ? <Button disabled={!hasSource || selected.length === 0 || isGenerating} onClick={handleGenerate} icon="spark">{isGenerating ? "Generating…" : generationError ? "Try again" : "Generate resources"}</Button> : <Button onClick={finish} icon="arrow">Open learning set</Button>}
         </div>
       </section>
-      <aside className="panel source-proof"><p className="eyebrow">SOURCE BOUNDARY</p><h3>Grounded in your material</h3><p>Learning resources are created directly from the text and files you provided.</p><div><Icon name="file"/><span><strong>{preparedMaterial?.topic || profile.learningTopic || "Uploaded material"}</strong><small>{preparedMaterial?.files.length || 0} file(s) · {preparedMaterial?.notes ? `${preparedMaterial.notes.length} chars` : "Notes provided"}</small></span></div><div><Icon name="offline"/><span><strong>Offline after saving</strong><small>Generated items stay available in your learning set</small></span></div></aside>
+      <aside className="panel source-proof"><p className="eyebrow">SOURCE BOUNDARY</p><h3>Grounded in your material</h3><p>Resources are created only from the text and files you provided. Gaps are reported instead of invented.</p><div><Icon name="file"/><span><strong>{topic}</strong><small>{preparedMaterial?.files.length || 0} file(s) · {preparedMaterial?.notes.trim() ? `${preparedMaterial.notes.trim().split(/\s+/).length} words of notes` : "no typed notes"}</small></span></div><div><Icon name="offline"/><span><strong>Runs on your device</strong><small>Generated items stay available in your learning set</small></span></div></aside>
     </div>
   </div>;
+}
+
+function MaterialNotice({ material }: { material: MaterialSet }) {
+  const notes = [...(!material.online ? ["Local Ollama was offline, so these materials were built directly from your text."] : []), ...material.warnings];
+  if (!notes.length) return null;
+  return <div className="status-callout warning"><Icon name="spark"/><p><strong>Heads up</strong><br/>{notes.slice(0, 3).join(" ")}</p></div>;
 }
 
 function ResourceLibrary({
   go,
   create,
   material,
+  profile,
+  onSelectSavedResource,
 }: {
   go: (page: Page) => void;
   create: () => void;
-  material: GeneratedLearningResource | null;
+  material: MaterialSet | null;
+  profile?: ProfileData;
+  onSelectSavedResource?: (m: MaterialSet) => void;
 }) {
   const [filter, setFilter] = useState<"all" | "notes" | "cards" | "quiz">("all");
-  const content = (material?.version.content || {}) as Partial<StudyMaterialsResponse>;
-  const keyNotesCount = content.key_notes?.length || 4;
-  const cardsCount = content.flashcards?.length || 6;
-  const quizzesCount = content.quizzes?.length || 3;
-  const topicTitle = material?.resource.topic || "Cell division & mitosis";
+  const [savedResources, setSavedResources] = useState<LearningResourceRead[]>([]);
+  const [loadingResource, setLoadingResource] = useState(false);
+
+  useEffect(() => {
+    if (profile?.onboardingId != null) {
+      api.listLearningResources(profile.onboardingId)
+        .then(res => setSavedResources(res))
+        .catch(() => setSavedResources([]));
+    }
+  }, [profile?.onboardingId, material?.resourceId]);
+
+  const loadSaved = async (resource: LearningResourceRead) => {
+    if (loadingResource) return;
+    setLoadingResource(true);
+    try {
+      const versions = await api.listVersions(resource.id);
+      if (versions.length > 0) {
+        const currentVersion = versions.find(v => v.is_current) || versions[0];
+        const loaded = fromVersionToMaterialSet(currentVersion, {
+          sourceLabel: resource.source_label,
+          onboardingId: profile?.onboardingId || undefined,
+        });
+        if (loaded && onSelectSavedResource) {
+          onSelectSavedResource(loaded);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to load saved resource version:", err);
+    } finally {
+      setLoadingResource(false);
+    }
+  };
+
+  const sm = material?.materials;
+  const keyNotesCount = material ? (sm?.key_notes.length || sm?.reviewer.sections.length || 0) : 4;
+  const cardsCount = material ? toCards(sm).length : demoCards.length;
+  const quizzesCount = material ? toQuizItems(sm).length : quizQuestions.length;
+  const topicTitle = material?.topic || "Cell division & mitosis";
 
   const actions = [
     { id: "notes", label: "Key notes", icon: "book" as IconName, page: "notes" as Page, meta: `${keyNotesCount} sections` },
     { id: "cards", label: "Flashcards", icon: "cards" as IconName, page: "flashcards" as Page, meta: `${cardsCount} cards` },
     { id: "quiz", label: "Quiz & reviewer", icon: "quiz" as IconName, page: "quiz" as Page, meta: `${quizzesCount} questions` },
   ];
+  const source = material
+    ? `${material.fileNames.length ? `${material.fileNames.length} file(s)` : "Pasted notes"} · ${material.model} · ${material.seconds.toFixed(1)}s`
+    : "Biology lesson notes";
   return <div className="page library-page">
     <section className="workflow-hero"><div><Badge tone="blue">LEARNING RESOURCES</Badge><h2>Everything you need, in one learning set.</h2><p>Open saved material, continue studying, or create a new set from your own notes and files.</p></div><Button onClick={create} icon="plus">Create learning set</Button></section>
+    
+    {savedResources.length > 0 && (
+      <section className="panel mb-4 p-4 border border-[var(--line)] rounded-2xl bg-[var(--mist)]">
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <p className="eyebrow m-0">SAVED STUDY SETS ({savedResources.length})</p>
+          {loadingResource && <span className="text-xs text-[var(--muted)]">Loading study set…</span>}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {savedResources.map(res => {
+            const isSelected = material?.resourceId === res.id;
+            return (
+              <button
+                key={res.id}
+                type="button"
+                onClick={() => loadSaved(res)}
+                disabled={loadingResource}
+                className={`px-3 py-1.5 rounded-xl text-sm font-medium border transition-all ${
+                  isSelected
+                    ? "bg-[var(--sage)] text-white border-[var(--sage)] shadow-sm"
+                    : "bg-[var(--paper)] text-[var(--ink)] border-[var(--line)] hover:border-[var(--sage)]"
+                }`}
+              >
+                {res.title}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    )}
+
+    {material && <MaterialNotice material={material}/>}
     <div className="library-tabs" role="tablist" aria-label="Filter learning resources">{[["all", "All resources"], ["notes", "Notes"], ["cards", "Flashcards"], ["quiz", "Quizzes"]].map(([id, label]) => <button role="tab" aria-selected={filter === id} className={filter === id ? "active" : ""} onClick={() => setFilter(id as typeof filter)} key={id}>{label}</button>)}</div>
     <section className="panel learning-set">
-      <div className="learning-set-head"><div className="set-art"><Icon name="book" size={28}/></div><div><span><Badge>{material ? "Generated Material" : "Biology"}</Badge><Badge tone="neutral">Available offline</Badge></span><h3>{topicTitle}</h3><p>Source: {material ? `${material.resource.files_count || 1} file(s) · AI generated` : "Biology lesson notes"} · Updated today · Version {material?.version.version_number || 1}</p></div><Button onClick={() => go("focus")} icon="play">Start studying</Button></div>
+      <div className="learning-set-head"><div className="set-art"><Icon name="book" size={28}/></div><div><span><Badge>{material ? (material.resourceId ? "Saved in Database" : "Generated") : "Biology"}</Badge><Badge tone="neutral">Available offline</Badge></span><h3>{topicTitle}</h3><p>Source: {source}</p></div><Button onClick={() => go("focus")} icon="play">Start studying</Button></div>
       <div className="set-progress"><span><strong>Learning progress</strong><small>No completed quiz yet</small></span><div><i/></div><button onClick={() => go("knowledge")}>View knowledge map <Icon name="arrow" size={15}/></button></div>
-      <div className="resource-action-grid">{actions.filter(item => filter === "all" || filter === item.id).map(item => <button key={item.id} onClick={() => go(item.page)}><span><Icon name={item.icon}/></span><span><strong>{item.label}</strong><small>{item.meta} · {material ? "personalized source" : "demo source"}</small></span><Icon name="chevron"/></button>)}</div>
-      <div className="version-row"><span><Icon name="layers"/><strong>Version {material?.version.version_number || 1}</strong><small>{material ? "Local AI generated learning set" : "Original sample set · no adaptive updates yet"}</small></span><button onClick={() => go("recommendations")}>Check recommendations</button></div>
+      <div className="resource-action-grid">{actions.filter(item => filter === "all" || filter === item.id).map(item => <button key={item.id} onClick={() => go(item.page)}><span><Icon name={item.icon}/></span><span><strong>{item.label}</strong><small>{item.meta} · {material ? "from your material" : "demo source"}</small></span><Icon name="chevron"/></button>)}</div>
+      <div className="version-row"><span><Icon name="layers"/><strong>Version {material?.versionId ? `${material.versionId}` : "1"}</strong><small>{material ? "Saved on your local device & backend database" : "Original sample set · no adaptive updates yet"}</small></span><button onClick={() => go("recommendations")}>Check recommendations</button></div>
     </section>
     <section className="library-empty panel"><div><Icon name="plus"/></div><span><strong>Create another learning set</strong><small>Import notes, PDFs, text files, or paste text manually.</small></span><Button variant="secondary" onClick={create} icon="upload">Add material</Button></section>
   </div>;
+}
+
+function EmptyViewer({ back, what }: { back: () => void; what: string }) {
+  return <div className="page viewer-page"><button className="back-link" onClick={back}>← Learning Resources</button>
+    <section className="empty-evidence panel"><div><Icon name="layers" size={28}/></div><h3>No {what} in this set</h3><p>The model didn't return usable {what}. Try generating again with more detailed notes.</p></section></div>;
 }
 
 function NotesViewer({
@@ -909,40 +991,39 @@ function NotesViewer({
 }: {
   back: () => void;
   start: () => void;
-  material: GeneratedLearningResource | null;
+  material: MaterialSet | null;
 }) {
-  const content = (material?.version.content || {}) as Partial<StudyMaterialsResponse>;
-  const topicTitle = material?.resource.topic || "Cell division & mitosis";
-  const notesList = content.key_notes || [];
-  const summary = content.summary?.content || content.direct_answer;
+  const sm = material?.materials;
+  const topicTitle = material?.topic || "Cell division & mitosis";
+  const sections = material
+    ? [
+        ...(sm?.key_notes || []).map(n => ({ title: n.topic, points: n.notes })),
+        ...(sm?.reviewer.sections || []).map(s => ({ title: s.title, points: [s.content, ...s.key_points].filter(Boolean) })),
+      ].filter(s => s.points.length)
+    : [];
+  const summary = sm?.direct_answer || sm?.summary?.content;
+  if (material && !sections.length && !summary) return <EmptyViewer back={back} what="notes"/>;
 
   return <div className="page viewer-page"><button className="back-link" onClick={back}>← Learning Resources</button>
-    <div className="viewer-layout"><article className="panel note-document"><div className="document-head"><div><Badge>{material ? `KEY NOTES · VERSION ${material.version.version_number}` : "DEMO KEY NOTES · VERSION 1"}</Badge><h2>{topicTitle}</h2><p>Referenced source: {material ? `Extracted & Generated Material` : "Biology lesson notes"}</p></div><Badge tone="neutral">Available offline</Badge></div>
+    <div className="viewer-layout"><article className="panel note-document"><div className="document-head"><div><Badge>{material ? "KEY NOTES · GENERATED" : "DEMO KEY NOTES · VERSION 1"}</Badge><h2>{topicTitle}</h2><p>Referenced source: {material ? (sm?.source_summary || "Your material") : "Biology lesson notes"}</p></div><Badge tone="neutral">Available offline</Badge></div>
+      {material && <MaterialNotice material={material}/>}
       <div className="key-takeaway"><Icon name="spark"/><p><strong>Key takeaway</strong><br/>{summary || "Cell division supports growth, repair, and reproduction. Mitosis produces two genetically identical daughter cells."}</p></div>
-      {notesList.length > 0 ? (
-        notesList.map((item, idx) => (
-          <div key={idx} className="mt-4">
-            <h3 className="text-lg font-bold text-[var(--ink)]">{item.topic}</h3>
-            <ul className="list-disc pl-5 mt-1 space-y-1">
-              {item.notes.map((note, nIdx) => <li key={nIdx} className="text-sm text-[var(--muted)]">{note}</li>)}
-            </ul>
-          </div>
-        ))
-      ) : (
-        <>
-          <h3>Before division</h3><p>During interphase, a cell grows, performs its normal functions, and copies its DNA so each new cell can receive a complete set.</p>
-          <h3>The four phases of mitosis</h3><ol><li><strong>Prophase:</strong> Chromosomes condense and become visible.</li><li><strong>Metaphase:</strong> Chromosomes line up at the cell equator.</li><li><strong>Anaphase:</strong> Sister chromatids move to opposite poles.</li><li><strong>Telophase:</strong> New nuclei form around each chromosome set.</li></ol>
-          <h3>Cytokinesis</h3><p>The cytoplasm divides, completing the formation of two daughter cells.</p>
-        </>
-      )}
-    </article><aside className="stack"><section className="panel viewer-side"><p className="eyebrow">CONTINUE LEARNING</p><h3>Ready to recall this?</h3><p>Use the same source material in a focused study session.</p><Button onClick={start} icon="play" className="full-button">Start study mode</Button></section><section className="panel source-proof compact"><p className="eyebrow">SOURCE</p><div><Icon name="file"/><span><strong>{topicTitle}</strong><small>{material ? "Local AI model output" : "Built-in demo content"}</small></span></div></section></aside></div>
+      {material ? <>
+        {sections.map((s, i) => <div key={i}><h3>{s.title}</h3><ul>{s.points.map((p, j) => <li key={j}>{p}</li>)}</ul></div>)}
+        {!!sm?.source_coverage.content_gaps.length && <div className="callout"><Icon name="spark"/><p><strong>Not covered in your source:</strong> {sm.source_coverage.content_gaps.join("; ")}</p></div>}
+      </> : <>
+        <h3>Before division</h3><p>During interphase, a cell grows, performs its normal functions, and copies its DNA so each new cell can receive a complete set.</p>
+        <h3>The four phases of mitosis</h3><ol><li><strong>Prophase:</strong> Chromosomes condense and become visible.</li><li><strong>Metaphase:</strong> Chromosomes line up at the cell equator.</li><li><strong>Anaphase:</strong> Sister chromatids move to opposite poles.</li><li><strong>Telophase:</strong> New nuclei form around each chromosome set.</li></ol>
+        <h3>Cytokinesis</h3><p>The cytoplasm divides, completing the formation of two daughter cells.</p>
+      </>}
+    </article><aside className="stack"><section className="panel viewer-side"><p className="eyebrow">CONTINUE LEARNING</p><h3>Ready to recall this?</h3><p>Use the same source material in a focused study session.</p><Button onClick={start} icon="play" className="full-button">Start study mode</Button></section><section className="panel source-proof compact"><p className="eyebrow">SOURCE</p><div><Icon name="file"/><span><strong>{material ? (material.fileNames.join(", ") || "Pasted notes") : "Biology lesson notes"}</strong><small>{material ? `Generated by ${material.model}` : "Built-in demo content"}</small></span></div></section></aside></div>
   </div>;
 }
 
-const demoCards = [
-  ["What happens during interphase?", "The cell grows and copies its DNA before division."],
-  ["Where do chromosomes line up during metaphase?", "At the cell’s equator."],
-  ["What does mitosis produce?", "Two genetically identical daughter cells."],
+const demoCards: CardItem[] = [
+  { front: "What happens during interphase?", back: "The cell grows and copies its DNA before division.", concept: "Interphase" },
+  { front: "Where do chromosomes line up during metaphase?", back: "At the cell’s equator.", concept: "Mitosis phases" },
+  { front: "What does mitosis produce?", back: "Two genetically identical daughter cells.", concept: "Purpose of mitosis" },
 ];
 
 function FlashcardsViewer({
@@ -952,27 +1033,25 @@ function FlashcardsViewer({
 }: {
   back: () => void;
   takeQuiz: () => void;
-  material: GeneratedLearningResource | null;
+  material: MaterialSet | null;
 }) {
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [ratings, setRatings] = useState<Record<number, "understood" | "practice">>({});
 
-  const content = (material?.version.content || {}) as Partial<StudyMaterialsResponse>;
-  const activeCards = content.flashcards && content.flashcards.length > 0
-    ? content.flashcards.map(c => [c.front, c.back])
-    : demoCards;
-  const topicTitle = material?.resource.topic || "Cell division & mitosis";
+  const activeCards = material ? toCards(material.materials) : demoCards;
+  const topicTitle = material?.topic || "Cell division & mitosis";
+  if (!activeCards.length) return <EmptyViewer back={back} what="flashcards"/>;
 
   const move = (next: number) => { setIndex(next); setFlipped(false); };
   return <div className="page cards-page"><button className="back-link" onClick={back}>← Learning Resources</button><div className="cards-header"><div><Badge tone="blue">{material ? "FLASHCARDS" : "DEMO FLASHCARDS"}</Badge><h2>{topicTitle}</h2><p>Card {index + 1} of {activeCards.length} · saved offline</p></div><div className="card-count">{Object.keys(ratings).length}/{activeCards.length}<small>reviewed</small></div></div>
-    <button className={`study-flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)} aria-label={flipped ? "Showing answer. Activate to show question." : "Showing question. Activate to reveal answer."}><span className="eyebrow">{flipped ? "ANSWER" : "QUESTION"}</span><strong>{activeCards[index]?.[flipped ? 1 : 0]}</strong><small>{flipped ? "Tap to see the question" : "Tap to reveal the answer"}</small></button>
+    <button className={`study-flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)} aria-label={flipped ? "Showing answer. Activate to show question." : "Showing question. Activate to reveal answer."}><span className="eyebrow">{flipped ? "ANSWER" : "QUESTION"}</span><strong>{flipped ? activeCards[index].back : activeCards[index].front}</strong><small>{flipped ? "Tap to see the question" : "Tap to reveal the answer"}</small></button>
     <div className="rating-row"><button className={ratings[index] === "practice" ? "selected" : ""} onClick={() => setRatings({ ...ratings, [index]: "practice" })}>Needs more practice</button><button className={ratings[index] === "understood" ? "selected" : ""} onClick={() => setRatings({ ...ratings, [index]: "understood" })}>I understand this</button></div>
     <div className="deck-nav"><Button variant="secondary" disabled={index === 0} onClick={() => move(index - 1)}>Previous</Button>{index < activeCards.length - 1 ? <Button onClick={() => move(index + 1)} icon="arrow">Next card</Button> : <Button onClick={takeQuiz} icon="quiz">Take the quiz</Button>}</div>
   </div>;
 }
 
-const quizQuestions = [
+const quizQuestions: QuizItem[] = [
   { question: "What is the main result of mitosis?", options: ["Four different cells", "Two genetically identical cells", "One larger cell"], answer: 1, concept: "Purpose of mitosis", explanation: "Mitosis produces two daughter cells with the same genetic information." },
   { question: "During which phase do chromosomes line up at the cell equator?", options: ["Prophase", "Metaphase", "Telophase"], answer: 1, concept: "Mitosis phases", explanation: "Meta means middle: chromosomes align across the middle during metaphase." },
   { question: "What happens before mitosis during interphase?", options: ["DNA is copied", "The cytoplasm splits", "Chromatids move apart"], answer: 0, concept: "Interphase", explanation: "The cell grows and duplicates its DNA during interphase." },
@@ -985,34 +1064,21 @@ function QuizViewer({
 }: {
   back: () => void;
   submit: (attempt: Attempt) => void;
-  material: GeneratedLearningResource | null;
+  material: MaterialSet | null;
 }) {
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
 
-  const content = (material?.version.content || {}) as Partial<StudyMaterialsResponse>;
-  const activeQuestions = content.quizzes && content.quizzes.length > 0
-    ? content.quizzes.map(q => {
-        const opts = q.options || ["True", "False"];
-        let ansIdx = opts.indexOf(q.correct_answer);
-        if (ansIdx === -1) ansIdx = 0;
-        return {
-          question: q.question,
-          options: opts,
-          answer: ansIdx,
-          concept: q.topic || "Core Concept",
-          explanation: q.explanation || `Correct answer: ${q.correct_answer}`,
-        };
-      })
-    : quizQuestions;
+  const activeQuestions = material ? toQuizItems(material.materials) : quizQuestions;
+  if (!activeQuestions.length) return <EmptyViewer back={back} what="quiz questions"/>;
 
-  const current = activeQuestions[index] || activeQuestions[0];
+  const current = activeQuestions[index];
   const selected = answers[index];
   const finish = () => {
     const concepts = activeQuestions.map((question, questionIndex) => ({ name: question.concept, correct: answers[questionIndex] === question.answer }));
     submit({ score: concepts.filter(item => item.correct).length, total: activeQuestions.length, completedAt: new Date().toISOString(), source: "quiz", concepts });
   };
-  return <div className="page quiz-page"><button className="back-link" onClick={back}>← Learning Resources</button><section className="quiz-shell panel"><div className="quiz-progress"><span><strong>{material?.resource.topic || "Cell division"} quiz</strong><small>Question {index + 1} of {activeQuestions.length}</small></span><div><i style={{ width: `${((index + 1) / activeQuestions.length) * 100}%` }}/></div></div><Badge tone="peach">{material ? "AI GENERATED QUIZ" : "DEMO QUIZ · SAVES LOCALLY"}</Badge><h2>{current.question}</h2><div className="quiz-options">{current.options.map((option, optionIndex) => <button className={selected === optionIndex ? "selected" : ""} aria-pressed={selected === optionIndex} onClick={() => setAnswers({ ...answers, [index]: optionIndex })} key={option}><span>{String.fromCharCode(65 + optionIndex)}</span>{option}</button>)}</div>
+  return <div className="page quiz-page"><button className="back-link" onClick={back}>← Learning Resources</button><section className="quiz-shell panel"><div className="quiz-progress"><span><strong>{material?.topic || "Cell division"} quiz</strong><small>Question {index + 1} of {activeQuestions.length}</small></span><div><i style={{ width: `${((index + 1) / activeQuestions.length) * 100}%` }}/></div></div><Badge tone="peach">{material ? "GENERATED QUIZ · SAVES LOCALLY" : "DEMO QUIZ · SAVES LOCALLY"}</Badge><h2>{current.question}</h2><div className="quiz-options">{current.options.map((option, optionIndex) => <button className={selected === optionIndex ? "selected" : ""} aria-pressed={selected === optionIndex} onClick={() => setAnswers({ ...answers, [index]: optionIndex })} key={`${optionIndex}-${option}`}><span>{String.fromCharCode(65 + optionIndex)}</span>{option}</button>)}</div>
       {selected !== undefined && <div className={`answer-feedback ${selected === current.answer ? "correct" : "incorrect"}`} aria-live="polite"><Icon name={selected === current.answer ? "check" : "spark"}/><p><strong>{selected === current.answer ? "That’s right." : "No worries—this is useful evidence."}</strong><br/>{current.explanation}</p></div>}
       <div className="quiz-footer"><Button variant="secondary" disabled={index === 0} onClick={() => setIndex(index - 1)}>Previous</Button>{index < activeQuestions.length - 1 ? <Button disabled={selected === undefined} onClick={() => setIndex(index + 1)} icon="arrow">Next question</Button> : <Button disabled={selected === undefined} onClick={finish} icon="check">Submit quiz</Button>}</div></section>
   </div>;
@@ -2221,7 +2287,7 @@ export default function App() {
   const [attempts, setAttempts] = useState<Attempt[]>(initialProfile?.attempts || []);
   const [latestAttempt, setLatestAttempt] = useState<Attempt | null>(initialProfile?.attempts.at(-1) || null);
   const [preparedMaterial, setPreparedMaterial] = useState<PreparedMaterial | null>(null);
-  const [generatedMaterial, setGeneratedMaterial] = useState<GeneratedLearningResource | null>(null);
+  const [generatedMaterial, setGeneratedMaterial] = useState<MaterialSet | null>(null);
   const [setupOpen, setSetupOpen] = useState(true);
   const [editingProfile, setEditingProfile] = useState(false);
   const profilesRef = useRef(profiles);
@@ -2357,7 +2423,7 @@ export default function App() {
     persistProfiles(profiles, profileId);
     void syncProfileFromServer(profileId, selected.profile.onboardingId);
   };
-  const saveAttempt = (attempt: Attempt) => {
+  const saveAttempt = async (attempt: Attempt) => {
     const next = [...attempts, attempt];
     setAttempts(next);
     setLatestAttempt(attempt);
@@ -2365,6 +2431,40 @@ export default function App() {
     setProfiles(nextProfiles);
     persistProfiles(nextProfiles, activeProfileId);
     setPage("completion");
+
+    // Sync session to backend SQLite for live knowledge-map and reports
+    if (profile.onboardingId != null && generatedMaterial?.versionId != null) {
+      try {
+        const session = await api.startStudySession({
+          onboarding_id: profile.onboardingId,
+          resource_version_id: generatedMaterial.versionId,
+          mode: attempt.source === "quiz" ? "quiz" : "practice",
+          source: "practice_quiz",
+        });
+
+        for (let i = 0; i < attempt.concepts.length; i++) {
+          const c = attempt.concepts[i];
+          await api.submitStudyAnswer(session.id, {
+            question_id: `q-${i + 1}`,
+            concept_id: c.name,
+            concept_name: c.name,
+            student_answer: c.correct ? "correct" : "incorrect",
+            correct_answer: "correct",
+            is_correct: c.correct,
+            time_taken_seconds: 5,
+          });
+        }
+
+        await api.completeStudySession(session.id, {
+          score: attempt.score,
+          total_items: attempt.total,
+          correct_items: attempt.score,
+          time_spent_seconds: attempt.concepts.length * 5,
+        });
+      } catch (sessionErr) {
+        console.warn("Could not sync study session to backend database:", sessionErr);
+      }
+    }
   };
   const completeStudy = (score: number, total: number, concepts: { name: string; correct: boolean }[]) => saveAttempt({
     score,
@@ -2443,7 +2543,7 @@ export default function App() {
     onCancel={() => { setSetupOpen(false); setEditingProfile(false); setCreatingNewProfile(false); }}
   />;
   if (page === "focus") {
-    return profile.onboardingId != null ? (
+    return profile.onboardingId != null && !generatedMaterial ? (
       <StudyMode
         key={activeProfileId}
         onboardingId={profile.onboardingId}
@@ -2477,12 +2577,12 @@ export default function App() {
     />
     <main className="main-shell"><Topbar title={titles[page]} online={online} setOnline={setOnline}/>
       {page === "home" && <Home go={setPage} online={online} openOffline={() => setOfflineOpen(true)} profile={profile}/>}
-      {page === "tutor" && <Tutor online={online}/>}
+      {page === "tutor" && <Tutor online={online} profile={profile} material={generatedMaterial}/>}
       {page === "planner" && <StudyMode key={activeProfileId} onboardingId={profile.onboardingId} onComplete={completeStudy} onExit={() => setPage("library")}/>}
       {page === "lessons" && <Lessons online={online} addMaterial={() => setPage("ingest")}/>}
       {page === "ingest" && <ContentIngestion online={online} done={next => setPage(next || "library")} onPrepareMaterial={setPreparedMaterial}/>}
       {page === "generation" && <Generation online={online} profile={profile} preparedMaterial={preparedMaterial} back={() => setPage("ingest")} finish={() => setPage("library")} onResourceGenerated={setGeneratedMaterial}/>}
-      {page === "library" && <ResourceLibrary go={setPage} create={() => setPage("ingest")} material={generatedMaterial}/>}
+      {page === "library" && <ResourceLibrary go={setPage} create={() => setPage("ingest")} material={generatedMaterial} profile={profile} onSelectSavedResource={setGeneratedMaterial}/>}
       {page === "notes" && <NotesViewer back={() => setPage("library")} start={() => setPage("focus")} material={generatedMaterial}/>}
       {page === "flashcards" && <FlashcardsViewer back={() => setPage("library")} takeQuiz={() => setPage("quiz")} material={generatedMaterial}/>}
       {page === "quiz" && <QuizViewer back={() => setPage("library")} submit={saveAttempt} material={generatedMaterial}/>}
