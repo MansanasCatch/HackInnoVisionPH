@@ -367,7 +367,7 @@ interface QAScenario {
   detail: string;
 }
 
-function AutomationTesterPanel({ go, onboardingId }: { go: (p: Page) => void; onboardingId: number | null }) {
+function AutomationTesterPanel({ go, onboardingId, startDemo }: { go: (p: Page) => void; onboardingId: number | null; startDemo: (step?: number) => void }) {
   const [suiteStatus, setSuiteStatus] = useState<"idle" | "running" | "completed">("idle");
   const [autopilot, setAutopilot] = useState(false);
   const [activeScenarioId, setActiveScenarioId] = useState<number | null>(null);
@@ -771,7 +771,17 @@ function AutomationTesterPanel({ go, onboardingId }: { go: (p: Page) => void; on
         </div>
 
         {/* Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            data-testid="start-live-demo"
+            onClick={() => startDemo(0)}
+            className="btn btn-primary bg-indigo-600 hover:bg-indigo-700 text-white border-0 text-xs px-3.5 py-2 font-semibold shadow-sm flex items-center gap-1.5"
+          >
+            <Icon name="play" size={14}/>
+            <span>Start Live Demonstration</span>
+          </button>
+
           <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none bg-white/70 px-2.5 py-1.5 rounded-lg border border-amber-200 hover:bg-white transition-all">
             <input
               type="checkbox"
@@ -798,27 +808,37 @@ function AutomationTesterPanel({ go, onboardingId }: { go: (p: Page) => void; on
 
       {/* Interactive Guided Tour Cards */}
       <div className="my-4">
-        <p className="eyebrow text-slate-500 mb-2">QUICK JUMP · INTERACTIVE WALKTHROUGH</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          <button type="button" onClick={() => go("ingest")} className="p-3 text-left rounded-xl bg-white border border-amber-200 hover:border-amber-400 hover:shadow-sm transition-all group">
-            <span className="badge badge-peach text-[10px] mb-1">STEP 1</span>
-            <strong className="block text-xs text-slate-800 group-hover:text-amber-800">1. Document Ingest</strong>
-            <small className="text-[11px] text-slate-500">Test OCR & text extractor</small>
+        <p className="eyebrow text-slate-500 mb-2">LIVE FUNCTIONALITY DEMO · JUMP TO ANY SCREEN</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+          <button type="button" onClick={() => startDemo(0)} className="p-2.5 text-left rounded-xl bg-white border border-amber-200 hover:border-amber-400 hover:shadow-sm transition-all group">
+            <span className="badge badge-peach text-[9px] mb-1">DEMO 1</span>
+            <strong className="block text-xs text-slate-800 group-hover:text-amber-800 leading-tight">1. Ingestion</strong>
+            <small className="text-[10px] text-slate-500">OCR & Extractor</small>
           </button>
-          <button type="button" onClick={() => go("library")} className="p-3 text-left rounded-xl bg-white border border-amber-200 hover:border-amber-400 hover:shadow-sm transition-all group">
-            <span className="badge badge-blue text-[10px] mb-1">STEP 2</span>
-            <strong className="block text-xs text-slate-800 group-hover:text-blue-800">2. Resource Sets</strong>
-            <small className="text-[11px] text-slate-500">Switch & load study packs</small>
+          <button type="button" onClick={() => startDemo(1)} className="p-2.5 text-left rounded-xl bg-white border border-amber-200 hover:border-amber-400 hover:shadow-sm transition-all group">
+            <span className="badge badge-blue text-[9px] mb-1">DEMO 2</span>
+            <strong className="block text-xs text-slate-800 group-hover:text-blue-800 leading-tight">2. Resources</strong>
+            <small className="text-[10px] text-slate-500">Notes & Flashcards</small>
           </button>
-          <button type="button" onClick={() => go("quiz")} className="p-3 text-left rounded-xl bg-white border border-amber-200 hover:border-amber-400 hover:shadow-sm transition-all group">
-            <span className="badge badge-sage text-[10px] mb-1">STEP 3</span>
-            <strong className="block text-xs text-slate-800 group-hover:text-emerald-800">3. Interactive Quiz</strong>
-            <small className="text-[11px] text-slate-500">Test answering & scoring</small>
+          <button type="button" onClick={() => startDemo(2)} className="p-2.5 text-left rounded-xl bg-white border border-amber-200 hover:border-amber-400 hover:shadow-sm transition-all group">
+            <span className="badge badge-sage text-[9px] mb-1">DEMO 3</span>
+            <strong className="block text-xs text-slate-800 group-hover:text-emerald-800 leading-tight">3. Practice Quiz</strong>
+            <small className="text-[10px] text-slate-500">Live Grading</small>
           </button>
-          <button type="button" onClick={() => go("knowledge")} className="p-3 text-left rounded-xl bg-white border border-amber-200 hover:border-amber-400 hover:shadow-sm transition-all group">
-            <span className="badge text-[10px] mb-1">STEP 4</span>
-            <strong className="block text-xs text-slate-800 group-hover:text-indigo-800">4. Knowledge Map</strong>
-            <small className="text-[11px] text-slate-500">Verify evidence mastery</small>
+          <button type="button" onClick={() => startDemo(3)} className="p-2.5 text-left rounded-xl bg-white border border-amber-200 hover:border-amber-400 hover:shadow-sm transition-all group">
+            <span className="badge text-[9px] mb-1">DEMO 4</span>
+            <strong className="block text-xs text-slate-800 group-hover:text-indigo-800 leading-tight">4. Knowledge</strong>
+            <small className="text-[10px] text-slate-500">Mastery Graph</small>
+          </button>
+          <button type="button" onClick={() => startDemo(4)} className="p-2.5 text-left rounded-xl bg-white border border-amber-200 hover:border-amber-400 hover:shadow-sm transition-all group">
+            <span className="badge badge-peach text-[9px] mb-1">DEMO 5</span>
+            <strong className="block text-xs text-slate-800 group-hover:text-amber-800 leading-tight">5. Reports</strong>
+            <small className="text-[10px] text-slate-500">Analytics & Metrics</small>
+          </button>
+          <button type="button" onClick={() => startDemo(5)} className="p-2.5 text-left rounded-xl bg-white border border-amber-200 hover:border-amber-400 hover:shadow-sm transition-all group">
+            <span className="badge badge-blue text-[9px] mb-1">DEMO 6</span>
+            <strong className="block text-xs text-slate-800 group-hover:text-blue-800 leading-tight">6. Hardware</strong>
+            <small className="text-[10px] text-slate-500">Local AI Setup</small>
           </button>
         </div>
       </div>
@@ -949,12 +969,12 @@ function AutomationTesterPanel({ go, onboardingId }: { go: (p: Page) => void; on
   );
 }
 
-function Home({ go, online, openOffline, profile }: { go: (p: Page) => void; online: boolean; openOffline: () => void; profile: ProfileData }) {
+function Home({ go, online, openOffline, profile, startDemo }: { go: (p: Page) => void; online: boolean; openOffline: () => void; profile: ProfileData; startDemo: (step?: number) => void }) {
   const firstName = profile.name.trim().split(" ")[0] || "Learner";
   const focusSubject = profile.subjects[0] || "Mathematics";
   const isAutomationTester = /automation|tester/i.test(profile.name);
   return <div className="page home-page">
-    {isAutomationTester && <AutomationTesterPanel go={go} onboardingId={profile.onboardingId}/>}
+    {isAutomationTester && <AutomationTesterPanel go={go} onboardingId={profile.onboardingId} startDemo={startDemo}/>}
     <section className="hero">
       <div className="hero-copy">
         <Badge tone="peach">WELCOME BACK</Badge>
@@ -2920,6 +2940,116 @@ function OfflineModal({ online, close, toggle }: { online: boolean; close: () =>
     <p className="prototype-note">Local AI is not configured. Live tutoring and new content generation require internet.</p></section></div>;
 }
 
+const DEMO_MATERIAL_SET: MaterialSet = {
+  topic: "Cellular Respiration & Energy",
+  model: "llama3.2:1b (local)",
+  seconds: 2.1,
+  online: true,
+  warnings: [],
+  fileNames: ["lecture_cell_bio.txt"],
+  versionId: 1,
+  materials: {
+    intent: "study_materials",
+    direct_answer: "Cellular respiration produces ATP by oxidizing glucose in mitochondria.",
+    topic: "Cellular Respiration",
+    source_summary: "Comprehensive guide to aerobic respiration, glycolysis, and ATP synthesis.",
+    summary: {
+      content: "Cellular respiration is a series of chemical reactions that break down glucose to produce ATP, which cells use for energy. The pathway includes glycolysis, the Krebs cycle, and oxidative phosphorylation.",
+    },
+    reviewer: {
+      title: "Cellular Respiration Reviewer",
+      sections: [
+        {
+          title: "ATP Synthesis",
+          content: "ATP synthase uses proton gradients to phosphorylate ADP into ATP.",
+          key_points: ["36-38 ATP per glucose", "Mitochondrial inner membrane"],
+        },
+      ],
+    },
+    key_notes: [
+      {
+        topic: "Glycolysis",
+        notes: ["Occurs in the cytoplasm", "Splits glucose into 2 pyruvate molecules", "Yields 2 net ATP and 2 NADH"],
+      },
+      {
+        topic: "Mitochondria & ATP",
+        notes: ["Known as the powerhouse of the cell", "Houses the electron transport chain", "Requires oxygen as the final electron acceptor"],
+      },
+    ],
+    flashcards: [
+      {
+        question: "What is the primary energy currency produced by cellular respiration?",
+        answer: "ATP (Adenosine Triphosphate)",
+        topic: "Cellular Respiration",
+      },
+      {
+        question: "Where in the eukaryotic cell does oxidative phosphorylation occur?",
+        answer: "The inner mitochondrial membrane",
+        topic: "Organelles",
+      },
+    ],
+    quizzes: [
+      {
+        type: "MULTIPLE_CHOICE",
+        question: "Which molecule serves as the main energy carrier produced during cellular respiration?",
+        options: ["ATP", "Glucose", "Hemoglobin", "Lipid"],
+        correct_answer: "ATP",
+        explanation: "ATP (adenosine triphosphate) stores and transfers chemical energy within cells.",
+        topic: "Cellular Respiration",
+      },
+    ],
+    exam: {
+      title: "Cellular Respiration Assessment",
+      questions: [],
+      total_questions: 1,
+      total_points: 5,
+    },
+    source_coverage: {
+      covered_topics: ["Cellular Respiration", "Mitochondria", "ATP"],
+      content_gaps: [],
+    },
+  },
+};
+
+const DEMO_STEPS = [
+  {
+    page: "ingest" as Page,
+    badge: "Step 1/6",
+    title: "1. Document Ingestion & OCR Extraction",
+    subtitle: "Upload notes, PDFs, or paste text. Calibrat8 parses and structures concepts completely on-device.",
+  },
+  {
+    page: "library" as Page,
+    badge: "Step 2/6",
+    title: "2. Resource Sets & Material Viewer",
+    subtitle: "Explore grounded summary notes and active recall flashcard decks generated from your documents.",
+  },
+  {
+    page: "quiz" as Page,
+    badge: "Step 3/6",
+    title: "3. Interactive Practice Quiz & Real-Time Grading",
+    subtitle: "Take grounded quizzes with instant feedback, explanations, and dynamic confidence scoring.",
+  },
+  {
+    page: "knowledge" as Page,
+    badge: "Step 4/6",
+    title: "4. Knowledge Analysis & Evidence Graph",
+    subtitle: "Visual graph tracking concept mastery percentages and evidence strength from real quiz attempts.",
+  },
+  {
+    page: "report" as Page,
+    badge: "Step 5/6",
+    title: "5. Comparative Reports & Learning Analytics",
+    subtitle: "Track accuracy trends, study minutes, and compare local performance against benchmarks.",
+  },
+  {
+    page: "settings" as Page,
+    badge: "Step 6/6",
+    title: "6. Hardware Detection & Local AI Setup",
+    subtitle: "Inspect auto-detected RAM, GPU acceleration, and select compatible offline Ollama models.",
+  },
+];
+
 export default function App() {
   const [profiles, setProfiles] = useState<LearnerProfile[]>(readSavedProfiles);
   const initialActiveProfileId = readActiveProfileId(profiles);
@@ -2935,6 +3065,50 @@ export default function App() {
   const [generatedMaterial, setGeneratedMaterial] = useState<MaterialSet | null>(null);
   const [setupOpen, setSetupOpen] = useState(true);
   const [editingProfile, setEditingProfile] = useState(false);
+  const [demoActive, setDemoActive] = useState(false);
+  const [demoStep, setDemoStep] = useState(0);
+  const [demoPaused, setDemoPaused] = useState(false);
+
+  const startLiveDemo = (initialStep = 0) => {
+    if (!generatedMaterial) {
+      setGeneratedMaterial(DEMO_MATERIAL_SET);
+    }
+    setDemoStep(initialStep);
+    setDemoActive(true);
+    setDemoPaused(false);
+    setPage(DEMO_STEPS[initialStep].page);
+  };
+
+  const stopLiveDemo = () => {
+    setDemoActive(false);
+    setDemoPaused(false);
+    setPage("home");
+  };
+
+  const nextDemoStep = () => {
+    setDemoStep(prev => {
+      const next = (prev + 1) % DEMO_STEPS.length;
+      setPage(DEMO_STEPS[next].page);
+      return next;
+    });
+  };
+
+  const prevDemoStep = () => {
+    setDemoStep(prev => {
+      const next = prev > 0 ? prev - 1 : DEMO_STEPS.length - 1;
+      setPage(DEMO_STEPS[next].page);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!demoActive || demoPaused) return;
+    const timer = setTimeout(() => {
+      nextDemoStep();
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [demoActive, demoStep, demoPaused]);
+
   const profilesRef = useRef(profiles);
   const activeIdRef = useRef(activeProfileId);
   useEffect(() => { profilesRef.current = profiles; }, [profiles]);
@@ -3221,7 +3395,7 @@ export default function App() {
       onAddProfile={handleAddProfile}
     />
     <main className="main-shell"><Topbar title={titles[page]} online={online} setOnline={setOnline}/>
-      {page === "home" && <Home go={setPage} online={online} openOffline={() => setOfflineOpen(true)} profile={profile}/>}
+      {page === "home" && <Home go={setPage} online={online} openOffline={() => setOfflineOpen(true)} profile={profile} startDemo={startLiveDemo}/>}
       {page === "tutor" && <Tutor online={online} profile={profile} material={generatedMaterial}/>}
       {page === "planner" && <StudyMode key={activeProfileId} onboardingId={profile.onboardingId} onComplete={completeStudy} onExit={() => setPage("library")}/>}
       {page === "lessons" && <Lessons online={online} addMaterial={() => setPage("ingest")}/>}
@@ -3238,6 +3412,60 @@ export default function App() {
       {page === "settings" && <Settings online={online} setOnline={setOnline} profile={profile} onModelChange={handleModelChange} editProfile={() => { setEditingProfile(true); setSetupOpen(true); }} onDeleteProfile={() => { setDeleteSettingsError(""); setDeleteConfirmFromSettings(true); }}/>}
       {page === "progress" && <Progress openCoach={() => setPage("coach")}/>}
       {page === "coach" && <Coach back={() => setPage("progress")}/>}
+
+      {demoActive && (
+        <aside data-testid="live-demo-hud" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-3xl bg-slate-900/95 text-white backdrop-blur-md border-2 border-amber-400 rounded-2xl p-4 shadow-2xl flex flex-wrap items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-4">
+          <div className="flex items-center gap-3">
+            <span className="grid size-11 place-items-center rounded-xl bg-amber-500 text-white font-bold text-xl shadow-md">🤖</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="badge badge-peach text-xs font-bold uppercase">{DEMO_STEPS[demoStep].badge}</span>
+                <strong className="text-sm font-bold text-amber-200">{DEMO_STEPS[demoStep].title}</strong>
+                <span className="text-[11px] text-emerald-400 font-mono">● LIVE DEMO</span>
+              </div>
+              <p className="text-xs text-slate-300 m-0 max-w-lg mt-0.5">{DEMO_STEPS[demoStep].subtitle}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="demo-prev"
+              onClick={prevDemoStep}
+              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold border border-slate-700 text-white transition-colors"
+              title="Previous step"
+            >
+              ◀ Prev
+            </button>
+            <button
+              type="button"
+              data-testid="demo-toggle-pause"
+              onClick={() => setDemoPaused(prev => !prev)}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-xs font-semibold text-white shadow-sm transition-colors"
+            >
+              {demoPaused ? "▶ Resume" : "⏸ Pause"}
+            </button>
+            <button
+              type="button"
+              data-testid="demo-next"
+              onClick={nextDemoStep}
+              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold border border-slate-700 text-white transition-colors"
+              title="Next step"
+            >
+              Next ▶
+            </button>
+            <button
+              type="button"
+              data-testid="demo-exit"
+              onClick={stopLiveDemo}
+              className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-xs font-semibold text-white ml-1 shadow-sm transition-colors"
+              title="Exit live demonstration"
+            >
+              ✕ Exit Demo
+            </button>
+          </div>
+        </aside>
+      )}
     </main>
     <MobileNav page={page} setPage={setPage}/>
     {offlineOpen && <OfflineModal online={online} close={() => setOfflineOpen(false)} toggle={() => setOnline(true)}/>}
