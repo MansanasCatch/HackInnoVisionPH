@@ -2,7 +2,7 @@ import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { api, ApiError, describeApiError } from "./api/client";
 import { mapAgeRangeToNumber, mapAgeToRange } from "./api/mappers";
 import StudyMode from "./StudyMode";
-import { asQuestion, buildTextContext, fromVersionToMaterialSet, MAX_CONTEXT_CHARS, toCards, toMaterialSet, toQuizItems, tutorReply } from "./materials";
+import { asQuestion, buildTextContext, combineMaterialSets, fromVersionToMaterialSet, MAX_CONTEXT_CHARS, toCards, toMaterialSet, toQuizItems, tutorReply } from "./materials";
 import type { CardItem, MaterialSet, QuizItem } from "./materials";
 import type {
   ActiveModelResponse,
@@ -1662,6 +1662,9 @@ function ResourceLibrary({
   const [filter, setFilter] = useState<"all" | "notes" | "cards" | "quiz">("all");
   const [savedResources, setSavedResources] = useState<LearningResourceRead[]>([]);
   const [loadingResource, setLoadingResource] = useState(false);
+  const [selectedResourceIds, setSelectedResourceIds] = useState<number[]>([]);
+  const [combining, setCombining] = useState(false);
+  const [combineError, setCombineError] = useState<string | null>(null);
 
   useEffect(() => {
     if (profile?.onboardingId != null) {
@@ -1670,6 +1673,55 @@ function ResourceLibrary({
         .catch(() => setSavedResources([]));
     }
   }, [profile?.onboardingId, material?.resourceId]);
+
+  const toggleSelectResource = (id: number, e: React.MouseEvent | React.ChangeEvent) => {
+    e.stopPropagation();
+    setSelectedResourceIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedResourceIds.length === savedResources.length) {
+      setSelectedResourceIds([]);
+    } else {
+      setSelectedResourceIds(savedResources.map(r => r.id));
+    }
+  };
+
+  const handleCombineSelected = async () => {
+    if (selectedResourceIds.length === 0 || combining) return;
+    setCombining(true);
+    setCombineError(null);
+    try {
+      const setsToCombine: MaterialSet[] = [];
+      for (const resId of selectedResourceIds) {
+        const versions = await api.listVersions(resId);
+        if (versions.length > 0) {
+          const currentVersion = versions.find(v => v.is_current) || versions[0];
+          const resObj = savedResources.find(r => r.id === resId);
+          const mat = fromVersionToMaterialSet(currentVersion, {
+            sourceLabel: resObj?.source_label,
+            onboardingId: profile?.onboardingId || undefined,
+          });
+          if (mat) setsToCombine.push(mat);
+        }
+      }
+      if (setsToCombine.length === 0) {
+        throw new Error("Could not load content for selected sets.");
+      }
+      const combined = combineMaterialSets(setsToCombine);
+      if (onSelectSavedResource) {
+        onSelectSavedResource(combined);
+      }
+      // Navigate directly to quiz page so learner can immediately take the combined exam
+      go("quiz");
+    } catch (err) {
+      setCombineError(describeApiError(err));
+    } finally {
+      setCombining(false);
+    }
+  };
 
   const loadSaved = async (resource: LearningResourceRead) => {
     if (loadingResource) return;
@@ -1712,27 +1764,70 @@ function ResourceLibrary({
     
     {savedResources.length > 0 && (
       <section className="panel mb-4 p-4 border border-[var(--line)] rounded-2xl bg-[var(--mist)]">
-        <div className="flex items-center justify-between gap-3 mb-2">
-          <p className="eyebrow m-0">SAVED STUDY SETS ({savedResources.length})</p>
-          {loadingResource && <span className="text-xs text-[var(--muted)]">Loading study set…</span>}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div>
+            <p className="eyebrow m-0">SAVED STUDY SETS ({savedResources.length})</p>
+            <span className="text-xs text-[var(--muted)]">Select sets to combine into a master 20–30+ question practice exam</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleSelectAll}
+              className="text-xs px-2.5 py-1 rounded-lg border border-[var(--line)] bg-[var(--paper)] hover:bg-white text-[var(--ink)] font-medium"
+            >
+              {selectedResourceIds.length === savedResources.length ? "Deselect all" : `Select all (${savedResources.length})`}
+            </button>
+            <Button
+              variant="primary"
+              disabled={selectedResourceIds.length === 0 || combining}
+              onClick={handleCombineSelected}
+              icon="spark"
+            >
+              {combining ? "Combining..." : `Combine & Take Quiz (${selectedResourceIds.length})`}
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+
+        {combineError && (
+          <div className="p-2.5 mb-3 text-xs text-red-700 bg-red-50 rounded-xl">{combineError}</div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
           {savedResources.map(res => {
-            const isSelected = material?.resourceId === res.id;
+            const isSelected = selectedResourceIds.includes(res.id);
+            const isCurrentLoaded = material?.resourceId === res.id;
             return (
-              <button
+              <div
                 key={res.id}
-                type="button"
-                onClick={() => loadSaved(res)}
-                disabled={loadingResource}
-                className={`px-3 py-1.5 rounded-xl text-sm font-medium border transition-all ${
+                className={`flex items-center justify-between p-2.5 rounded-xl border transition-all text-sm ${
                   isSelected
-                    ? "bg-[var(--sage)] text-white border-[var(--sage)] shadow-sm"
-                    : "bg-[var(--paper)] text-[var(--ink)] border-[var(--line)] hover:border-[var(--sage)]"
+                    ? "border-[var(--sage)] bg-[var(--sage-pale)]"
+                    : isCurrentLoaded
+                    ? "border-[var(--sage)] bg-white"
+                    : "border-[var(--line)] bg-[var(--paper)] hover:border-slate-300"
                 }`}
               >
-                {res.title}
-              </button>
+                <label className="flex items-center gap-2.5 flex-1 cursor-pointer select-none truncate">
+                  <input
+                    type="checkbox"
+                    className="size-4 rounded text-[var(--sage)] focus:ring-[var(--sage)]"
+                    checked={isSelected}
+                    onChange={(e) => toggleSelectResource(res.id, e)}
+                  />
+                  <span className="font-medium text-[var(--ink)] truncate" title={res.title}>
+                    {res.title}
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => loadSaved(res)}
+                  disabled={loadingResource}
+                  className="text-xs text-[var(--sage-dark)] hover:underline ml-2 whitespace-nowrap"
+                  title="Open this set individually"
+                >
+                  {isCurrentLoaded ? "Active" : "Open"}
+                </button>
+              </div>
             );
           })}
         </div>
