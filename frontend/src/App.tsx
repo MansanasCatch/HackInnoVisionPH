@@ -807,11 +807,18 @@ function Generation({
             if (name && !topicsList.includes(name)) topicsList.push(name);
           }
 
+          const backendTypeMap: Record<string, string> = {
+            notes: "summary",
+            cards: "flashcards",
+            quiz: "practice_quiz",
+          };
+          const mappedTypes = selected.map(s => backendTypeMap[s] || s);
+
           const versionRecord = await api.createResourceVersion(resourceRecord.id, {
             title: (topic || material.materials.topic).slice(0, 160),
             summary: material.materials.summary?.content || "",
             content: material.materials,
-            resource_types: selected,
+            resource_types: mappedTypes,
             topics: topicsList,
           });
 
