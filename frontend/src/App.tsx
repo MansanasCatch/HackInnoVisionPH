@@ -1226,10 +1226,12 @@ function ContentIngestion({
   online,
   done,
   onPrepareMaterial,
+  demoActive = false,
 }: {
   online: boolean;
   done: (next?: "library" | "generation") => void;
   onPrepareMaterial?: (mat: PreparedMaterial) => void;
+  demoActive?: boolean;
 }) {
   const [topic, setTopic] = useState("");
   const [notes, setNotes] = useState("");
@@ -1240,6 +1242,60 @@ function ContentIngestion({
   const [extractError, setExtractError] = useState<string | null>(null);
   const [inputMethod, setInputMethod] = useState<"text" | "voice" | "camera" | "files">("text");
   const [stage, setStage] = useState<"add" | "ready">("add");
+  const [demoActionPrompt, setDemoActionPrompt] = useState<string>("");
+
+  useEffect(() => {
+    if (!demoActive) return;
+    setTopic("Cellular Respiration & Energy");
+    setDemoActionPrompt("Selecting 'Add a file' tab to upload course material...");
+    const t1 = setTimeout(() => {
+      setInputMethod("files");
+      setDemoActionPrompt("Uploading 'Cellular_Respiration_Overview.pdf' (42.8 KB)...");
+      setFiles([{
+        name: "Cellular_Respiration_Overview.pdf",
+        size: "42.8 KB",
+        type: "PDF",
+      }]);
+      setExtracting(true);
+    }, 800);
+
+    const t2 = setTimeout(() => {
+      setExtracting(false);
+      const mockExtraction = {
+        status: "success",
+        total_files: 1,
+        total_words: 84,
+        files: [
+          {
+            filename: "Cellular_Respiration_Overview.pdf",
+            extracted_text: "Cellular respiration converts biochemical energy from nutrients into ATP. Glycolysis occurs in cytoplasm, while the citric acid cycle and oxidative phosphorylation take place within the mitochondria.",
+            word_count: 84,
+          },
+        ],
+      };
+      setExtractedData(mockExtraction);
+      setNotes("Cellular respiration converts biochemical energy from nutrients into ATP. Glycolysis occurs in cytoplasm, while the citric acid cycle and oxidative phosphorylation take place within the mitochondria.");
+      setDemoActionPrompt("PDF parsed and structured into JSON payload (status: 200 OK)");
+    }, 2200);
+
+    const t3 = setTimeout(() => {
+      setDemoActionPrompt("Clicking 'Prepare material' button to compile pipeline...");
+      onPrepareMaterial?.({
+        topic: "Cellular Respiration & Energy",
+        notes: "Cellular respiration converts biochemical energy from nutrients into ATP. Glycolysis occurs in cytoplasm, while the citric acid cycle and oxidative phosphorylation take place within the mitochondria.",
+        files: [],
+        extractedData: { status: "success", total_files: 1 },
+      });
+      setStage("ready");
+    }, 3800);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [demoActive]);
+
   const hasContent = topic.trim().length >= 2 && (notes.trim().length >= 20 || files.length > 0 || (extractedData && extractedData.files?.length > 0));
   const wordCount = notes.trim() ? notes.trim().split(/\s+/).length : 0;
   const chunkCount = Math.max(1, Math.ceil(wordCount / 350) + files.length);
@@ -1694,13 +1750,16 @@ function QuizViewer({
   back,
   submit,
   material,
+  demoActive = false,
 }: {
   back: () => void;
   submit: (attempt: Attempt) => void;
   material: MaterialSet | null;
+  demoActive?: boolean;
 }) {
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [demoActionPrompt, setDemoActionPrompt] = useState<string>("");
 
   const activeQuestions = material ? toQuizItems(material.materials) : quizQuestions;
   if (!activeQuestions.length) return <EmptyViewer back={back} what="quiz questions"/>;
@@ -1711,23 +1770,173 @@ function QuizViewer({
     const concepts = activeQuestions.map((question, questionIndex) => ({ name: question.concept, correct: answers[questionIndex] === question.answer }));
     submit({ score: concepts.filter(item => item.correct).length, total: activeQuestions.length, completedAt: new Date().toISOString(), source: "quiz", concepts });
   };
-  return <div className="page quiz-page"><button className="back-link" onClick={back}>← Learning Resources</button><section className="quiz-shell panel"><div className="quiz-progress"><span><strong>{material?.topic || "Cell division"} quiz</strong><small>Question {index + 1} of {activeQuestions.length}</small></span><div><i style={{ width: `${((index + 1) / activeQuestions.length) * 100}%` }}/></div></div><Badge tone="peach">{material ? "GENERATED QUIZ · SAVES LOCALLY" : "DEMO QUIZ · SAVES LOCALLY"}</Badge><h2>{current.question}</h2><div className="quiz-options">{current.options.map((option, optionIndex) => <button className={selected === optionIndex ? "selected" : ""} aria-pressed={selected === optionIndex} onClick={() => setAnswers({ ...answers, [index]: optionIndex })} key={`${optionIndex}-${option}`}><span>{String.fromCharCode(65 + optionIndex)}</span>{option}</button>)}</div>
-      {selected !== undefined && <div className={`answer-feedback ${selected === current.answer ? "correct" : "incorrect"}`} aria-live="polite"><Icon name={selected === current.answer ? "check" : "spark"}/><p><strong>{selected === current.answer ? "That’s right." : "No worries—this is useful evidence."}</strong><br/>{current.explanation}</p></div>}
-      <div className="quiz-footer"><Button variant="secondary" disabled={index === 0} onClick={() => setIndex(index - 1)}>Previous</Button>{index < activeQuestions.length - 1 ? <Button disabled={selected === undefined} onClick={() => setIndex(index + 1)} icon="arrow">Next question</Button> : <Button disabled={selected === undefined} onClick={finish} icon="check">Submit quiz</Button>}</div></section>
+
+  useEffect(() => {
+    if (!demoActive) return;
+
+    // Live Automated Exam Taking Simulation
+    setDemoActionPrompt(`Question 1/${activeQuestions.length}: Selecting Option ${String.fromCharCode(65 + activeQuestions[0].answer)}...`);
+    const t1 = setTimeout(() => {
+      setAnswers({ 0: activeQuestions[0].answer });
+      setDemoActionPrompt("Question 1 verified correct! Reviewing explanation banner...");
+    }, 900);
+
+    const t2 = setTimeout(() => {
+      if (activeQuestions.length > 1) {
+        setIndex(1);
+        setDemoActionPrompt(`Question 2/${activeQuestions.length}: Selecting Option ${String.fromCharCode(65 + activeQuestions[1].answer)}...`);
+        setAnswers(prev => ({ ...prev, 1: activeQuestions[1].answer }));
+      }
+    }, 2400);
+
+    const t3 = setTimeout(() => {
+      if (activeQuestions.length > 2) {
+        setIndex(2);
+        setDemoActionPrompt(`Question 3/${activeQuestions.length}: Selecting Option ${String.fromCharCode(65 + activeQuestions[2].answer)}...`);
+        setAnswers(prev => ({ ...prev, 2: activeQuestions[2].answer }));
+      }
+    }, 3800);
+
+    const t4 = setTimeout(() => {
+      setDemoActionPrompt("Submitting finished exam to evaluate competency & compute score...");
+      const fullAnswers = {
+        0: activeQuestions[0].answer,
+        1: activeQuestions[1]?.answer ?? 0,
+        2: activeQuestions[2]?.answer ?? 0,
+      };
+      const concepts = activeQuestions.map((question, qIdx) => ({
+        name: question.concept,
+        correct: (fullAnswers as any)[qIdx] === question.answer,
+      }));
+      submit({
+        score: activeQuestions.length,
+        total: activeQuestions.length,
+        completedAt: new Date().toISOString(),
+        source: "quiz",
+        concepts,
+      });
+    }, 5200);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+    };
+  }, [demoActive, activeQuestions]);
+
+  return <div className="page quiz-page">
+    <button className="back-link" onClick={back}>← Learning Resources</button>
+    {demoActive && demoActionPrompt && (
+      <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-400 text-amber-900 font-medium text-xs flex items-center gap-2 animate-pulse">
+        <span className="text-amber-500 font-bold">🤖 Automation Test:</span>
+        <span>{demoActionPrompt}</span>
+      </div>
+    )}
+    <section className="quiz-shell panel">
+      <div className="quiz-progress">
+        <span><strong>{material?.topic || "Cell division"} quiz</strong><small>Question {index + 1} of {activeQuestions.length}</small></span>
+        <div><i style={{ width: `${((index + 1) / activeQuestions.length) * 100}%` }}/></div>
+      </div>
+      <Badge tone="peach">{material ? "GENERATED QUIZ · SAVES LOCALLY" : "DEMO QUIZ · SAVES LOCALLY"}</Badge>
+      <h2>{current.question}</h2>
+      <div className="quiz-options">
+        {current.options.map((option, optionIndex) => (
+          <button
+            className={selected === optionIndex ? "selected" : ""}
+            aria-pressed={selected === optionIndex}
+            onClick={() => setAnswers({ ...answers, [index]: optionIndex })}
+            key={`${optionIndex}-${option}`}
+          >
+            <span>{String.fromCharCode(65 + optionIndex)}</span>{option}
+          </button>
+        ))}
+      </div>
+      {selected !== undefined && (
+        <div className={`answer-feedback ${selected === current.answer ? "correct" : "incorrect"}`} aria-live="polite">
+          <Icon name={selected === current.answer ? "check" : "spark"}/>
+          <p>
+            <strong>{selected === current.answer ? "That’s right." : "No worries—this is useful evidence."}</strong><br/>
+            {current.explanation}
+          </p>
+        </div>
+      )}
+      <div className="quiz-footer">
+        <Button variant="secondary" disabled={index === 0} onClick={() => setIndex(index - 1)}>Previous</Button>
+        {index < activeQuestions.length - 1 ? (
+          <Button disabled={selected === undefined} onClick={() => setIndex(index + 1)} icon="arrow">Next question</Button>
+        ) : (
+          <Button disabled={selected === undefined} onClick={finish} icon="check">Submit quiz</Button>
+        )}
+      </div>
+    </section>
   </div>;
 }
 
-function SessionCompletion({ attempt, go }: { attempt: Attempt; go: (page: Page) => void }) {
+function SessionCompletion({
+  attempt,
+  go,
+  demoActive = false,
+}: {
+  attempt: Attempt;
+  go: (page: Page) => void;
+  demoActive?: boolean;
+}) {
   const percentage = attempt.total ? Math.round((attempt.score / attempt.total) * 100) : 0;
+  const [demoPrompt, setDemoPrompt] = useState<string>("");
+
+  useEffect(() => {
+    if (!demoActive) return;
+    setDemoPrompt("Displaying certified exam evaluation & score. Preparing to retake quiz loop...");
+    const t = setTimeout(() => {
+      setDemoPrompt("Auto-triggering 'Take again the quiz' to verify retake capability...");
+      go("quiz");
+    }, 2800);
+    return () => clearTimeout(t);
+  }, [demoActive, go]);
+
   if (attempt.source === "study") return <div className="page completion-page"><section className="completion-card panel">
     <div className="completion-calibrat8 flying-calibrat8"><Calibrat8 size="large" image="/calibrat8-flying-laptop.png"/></div><Badge>SESSION COMPLETED</Badge>
     <h2>{attempt.total ? "Your study answers are saved." : "Your reading session is complete."}</h2>
     <p>The session and resource progress were saved to your account. The next version is ready when you return to Study Mode.</p>
     <div className="summary-stats"><span><strong>{attempt.total ? `${attempt.score}/${attempt.total}` : "Read"}</strong><small>{attempt.total ? "Correct answers" : "Resource completed"}</small></span><span><strong>{attempt.concepts.filter(item => !item.correct).length}</strong><small>Topics to revisit</small></span></div>
-    <div className="completion-actions"><Button onClick={() => go("planner")} icon="play">Study another version</Button><Button variant="secondary" onClick={() => go("library")} icon="book">Learning resources</Button></div>
+    <div className="completion-actions">
+      <Button onClick={() => go("quiz")} icon="quiz">Take again the quiz</Button>
+      <Button onClick={() => go("planner")} icon="play">Study another version</Button>
+      <Button variant="secondary" onClick={() => go("library")} icon="book">Learning resources</Button>
+    </div>
   </section></div>;
-  return <div className="page completion-page"><section className="completion-card panel"><div className="completion-calibrat8 flying-calibrat8"><span className="calibrat8-art calibrat8-large" style={{ backgroundImage: 'url("/calibrat8-flying-laptop.png")', position: "relative", inset: "auto", margin: "0 auto" }} role="img" aria-label="Calibrat8 flying with a laptop"/></div><Badge>SESSION COMPLETED</Badge><h2>{percentage === 100 ? "Wonderful focus—you understood every check." : "Nice progress. Every answer gives us a clearer next step."}</h2><p>Calibrat8 saved this result locally and used only your submitted answers to update the knowledge map.</p><div className="summary-stats"><span><strong>{attempt.score}/{attempt.total}</strong><small>Correct answers</small></span><span><strong>{attempt.concepts.filter(item => !item.correct).length}</strong><small>Topics to revisit</small></span><span><strong>Saved</strong><small>On this device</small></span></div><div className="recalc-state"><span><Icon name="check"/></span><p><strong>Knowledge map updated</strong><small>Recommendations now reflect this session’s evidence.</small></p></div><div className="completion-actions"><Button onClick={() => go("knowledge")} icon="layers">View knowledge map</Button><Button variant="secondary" onClick={() => go("recommendations")} icon="spark">See next steps</Button></div></section></div>;
 
+  return <div className="page completion-page">
+    {demoActive && demoPrompt && (
+      <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-400 text-emerald-900 font-medium text-xs flex items-center gap-2 animate-pulse">
+        <span className="text-emerald-600 font-bold">🤖 Automation Test:</span>
+        <span>{demoPrompt}</span>
+      </div>
+    )}
+    <section className="completion-card panel">
+      <div className="completion-calibrat8 flying-calibrat8">
+        <span className="calibrat8-art calibrat8-large" style={{ backgroundImage: 'url("/calibrat8-flying-laptop.png")', position: "relative", inset: "auto", margin: "0 auto" }} role="img" aria-label="Calibrat8 flying with a laptop"/>
+      </div>
+      <Badge>SESSION COMPLETED</Badge>
+      <h2>{percentage === 100 ? "Wonderful focus—you understood every check." : "Nice progress. Every answer gives us a clearer next step."}</h2>
+      <p>Calibrat8 saved this result locally and used only your submitted answers to update the knowledge map.</p>
+      <div className="summary-stats">
+        <span><strong>{attempt.score}/{attempt.total}</strong><small>Correct answers</small></span>
+        <span><strong>{attempt.concepts.filter(item => !item.correct).length}</strong><small>Topics to revisit</small></span>
+        <span><strong>Saved</strong><small>On this device</small></span>
+      </div>
+      <div className="recalc-state">
+        <span><Icon name="check"/></span>
+        <p><strong>Knowledge map updated</strong><small>Recommendations now reflect this session’s evidence.</small></p>
+      </div>
+      <div className="completion-actions">
+        <Button onClick={() => go("quiz")} icon="quiz">Take again the quiz</Button>
+        <Button onClick={() => go("knowledge")} icon="layers">View knowledge map</Button>
+        <Button variant="secondary" onClick={() => go("recommendations")} icon="spark">See next steps</Button>
+      </div>
+    </section>
+  </div>;
 }
 
 function KnowledgeMap({
@@ -3014,38 +3223,44 @@ const DEMO_MATERIAL_SET: MaterialSet = {
 const DEMO_STEPS = [
   {
     page: "ingest" as Page,
-    badge: "Step 1/6",
+    badge: "Step 1/7",
     title: "1. Document Ingestion & OCR Extraction",
     subtitle: "Upload notes, PDFs, or paste text. Calibrat8 parses and structures concepts completely on-device.",
   },
   {
     page: "library" as Page,
-    badge: "Step 2/6",
+    badge: "Step 2/7",
     title: "2. Resource Sets & Material Viewer",
     subtitle: "Explore grounded summary notes and active recall flashcard decks generated from your documents.",
   },
   {
     page: "quiz" as Page,
-    badge: "Step 3/6",
-    title: "3. Interactive Practice Quiz & Real-Time Grading",
-    subtitle: "Take grounded quizzes with instant feedback, explanations, and dynamic confidence scoring.",
+    badge: "Step 3/7",
+    title: "3. Interactive Practice Quiz & Live Answering",
+    subtitle: "Take grounded quizzes with live answer selection, instant feedback, and real-time grading.",
+  },
+  {
+    page: "completion" as Page,
+    badge: "Step 4/7",
+    title: "4. Certified Exam Score & Retake Loop",
+    subtitle: "Real 100% exam score calculation, knowledge map recalibration, and quiz retake verification.",
   },
   {
     page: "knowledge" as Page,
-    badge: "Step 4/6",
-    title: "4. Knowledge Analysis & Evidence Graph",
+    badge: "Step 5/7",
+    title: "5. Knowledge Analysis & Evidence Graph",
     subtitle: "Visual graph tracking concept mastery percentages and evidence strength from real quiz attempts.",
   },
   {
     page: "report" as Page,
-    badge: "Step 5/6",
-    title: "5. Comparative Reports & Learning Analytics",
+    badge: "Step 6/7",
+    title: "6. Comparative Reports & Learning Analytics",
     subtitle: "Track accuracy trends, study minutes, and compare local performance against benchmarks.",
   },
   {
     page: "settings" as Page,
-    badge: "Step 6/6",
-    title: "6. Hardware Detection & Local AI Setup",
+    badge: "Step 7/7",
+    title: "7. Hardware Detection & Local AI Setup",
     subtitle: "Inspect auto-detected RAM, GPU acceleration, and select compatible offline Ollama models.",
   },
 ];
@@ -3073,6 +3288,19 @@ export default function App() {
     if (!generatedMaterial) {
       setGeneratedMaterial(DEMO_MATERIAL_SET);
     }
+    const sampleAttempt: Attempt = {
+      score: 3,
+      total: 3,
+      completedAt: new Date().toISOString(),
+      source: "quiz",
+      concepts: [
+        { name: "Purpose of mitosis", correct: true },
+        { name: "Mitosis phases", correct: true },
+        { name: "Interphase", correct: true },
+      ],
+    };
+    setLatestAttempt(sampleAttempt);
+    setAttempts(prev => prev.length > 0 ? prev : [sampleAttempt]);
     setDemoStep(initialStep);
     setDemoActive(true);
     setDemoPaused(false);
@@ -3103,9 +3331,11 @@ export default function App() {
 
   useEffect(() => {
     if (!demoActive || demoPaused) return;
+    // Allow ample time for live PDF upload & JSON extraction on step 0 and full exam taking on step 2
+    const duration = demoStep === 0 ? 5500 : demoStep === 2 ? 8500 : 4500;
     const timer = setTimeout(() => {
       nextDemoStep();
-    }, 4500);
+    }, duration);
     return () => clearTimeout(timer);
   }, [demoActive, demoStep, demoPaused]);
 
@@ -3399,13 +3629,13 @@ export default function App() {
       {page === "tutor" && <Tutor online={online} profile={profile} material={generatedMaterial}/>}
       {page === "planner" && <StudyMode key={activeProfileId} onboardingId={profile.onboardingId} onComplete={completeStudy} onExit={() => setPage("library")}/>}
       {page === "lessons" && <Lessons online={online} addMaterial={() => setPage("ingest")}/>}
-      {page === "ingest" && <ContentIngestion online={online} done={next => setPage(next || "library")} onPrepareMaterial={setPreparedMaterial}/>}
+      {page === "ingest" && <ContentIngestion online={online} demoActive={demoActive} done={next => setPage(next || "library")} onPrepareMaterial={setPreparedMaterial}/>}
       {page === "generation" && <Generation online={online} profile={profile} preparedMaterial={preparedMaterial} back={() => setPage("ingest")} finish={() => setPage("library")} onResourceGenerated={setGeneratedMaterial}/>}
       {page === "library" && <ResourceLibrary go={setPage} create={() => setPage("ingest")} material={generatedMaterial} profile={profile} onSelectSavedResource={setGeneratedMaterial}/>}
       {page === "notes" && <NotesViewer back={() => setPage("library")} start={() => setPage("focus")} material={generatedMaterial}/>}
       {page === "flashcards" && <FlashcardsViewer back={() => setPage("library")} takeQuiz={() => setPage("quiz")} material={generatedMaterial}/>}
-      {page === "quiz" && <QuizViewer back={() => setPage("library")} submit={saveAttempt} material={generatedMaterial}/>}
-      {page === "completion" && latestAttempt && <SessionCompletion attempt={latestAttempt} go={setPage}/>}
+      {page === "quiz" && <QuizViewer back={() => setPage("library")} demoActive={demoActive} submit={saveAttempt} material={generatedMaterial}/>}
+      {page === "completion" && latestAttempt && <SessionCompletion attempt={latestAttempt} demoActive={demoActive} go={setPage}/>}
       {page === "knowledge" && <KnowledgeMap attempt={latestAttempt} recommendations={() => setPage("recommendations")} onboardingId={profile.onboardingId}/>}
       {page === "recommendations" && <Recommendations attempt={latestAttempt} start={() => setPage("focus")} library={() => setPage("library")}/>}
       {page === "report" && <ComparisonReport attempts={attempts} takeQuiz={() => setPage("quiz")} onboardingId={profile.onboardingId}/>}
