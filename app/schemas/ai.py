@@ -53,6 +53,12 @@ class AIGenerateRequest(BaseModel):
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Sampling temperature")
     max_tokens: int = Field(default=2048, ge=1, le=8192, description="Maximum tokens to generate")
     text_context: str | None = Field(default=None, description="Additional context or notes text")
+    item_count: int = Field(
+        default=10, ge=10, le=50, description="Exact count per selected item category"
+    )
+    material_types: list[Literal["key_notes", "flashcards", "quizzes", "exam"]] = Field(
+        default_factory=lambda: ["key_notes", "flashcards", "quizzes", "exam"], min_length=1
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 """Endpoints for Local AI generation and document ingestion (lessons, notes, files)."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
@@ -87,9 +87,7 @@ async def generate_with_files(
     ] = "",
     topic: Annotated[
         str | None,
-        Form(
-            description="Topic from user UI (e.g. 'Cell division'). Auto-inferred if blank."
-        ),
+        Form(description="Topic from user UI (e.g. 'Cell division'). Auto-inferred if blank."),
     ] = None,
     onboarding_id: Annotated[int | None, Form(description="Onboarding account ID")] = None,
     model_override: Annotated[str | None, Form(description="Optional model tag override")] = None,
@@ -99,6 +97,10 @@ async def generate_with_files(
     ] = None,
     temperature: Annotated[float, Form(description="Temperature sampling")] = 0.7,
     max_tokens: Annotated[int, Form(description="Max generation tokens")] = 2048,
+    item_count: Annotated[int, Form(ge=10, le=50)] = 10,
+    material_types: Annotated[
+        list[Literal["key_notes", "flashcards", "quizzes", "exam"]] | None, Form()
+    ] = None,
     files: Annotated[
         UploadFile | list[UploadFile] | None,
         File(description="Attached document or image file to ingest"),
@@ -116,6 +118,8 @@ async def generate_with_files(
         text_context=text_context,
         temperature=temperature,
         max_tokens=max_tokens,
+        item_count=item_count,
+        material_types=material_types or ["key_notes", "flashcards", "quizzes", "exam"],
     )
 
     return service.generate(request=req, uploaded_files=uploaded_files)
@@ -125,7 +129,7 @@ async def generate_with_files(
     "/search-and-retrieve",
     response_model=RAGSearchResponse,
     summary="Search web and retrieve authoritative RAG chunks for topic",
-    description="Zero-dependency topic search using SearXNG or Wikipedia fallback with pure Python BM25 ranking.",
+    description=("Topic search using SearXNG or Wikipedia fallback with pure Python BM25 ranking."),
 )
 def search_and_retrieve(request: RAGSearchRequest) -> RAGSearchResponse:
     """Execute topic search and extract top-ranked RAG passages."""
@@ -147,12 +151,14 @@ def search_and_retrieve(request: RAGSearchRequest) -> RAGSearchResponse:
     for res in web_results:
         text_segments = chunk_text(res.content, chunk_size=250, overlap=40)
         for segment in text_segments:
-            raw_chunks.append({
-                "chunk_id": chunk_counter,
-                "title": res.title,
-                "url": res.url,
-                "content": segment,
-            })
+            raw_chunks.append(
+                {
+                    "chunk_id": chunk_counter,
+                    "title": res.title,
+                    "url": res.url,
+                    "content": segment,
+                }
+            )
             chunk_counter += 1
 
     # 3. BM25 Ranking
@@ -168,7 +174,7 @@ def search_and_retrieve(request: RAGSearchRequest) -> RAGSearchResponse:
                 content=res.content[:600],
                 score=1.0,
             )
-            for idx, res in enumerate(web_results[:request.top_k_chunks], 1)
+            for idx, res in enumerate(web_results[: request.top_k_chunks], 1)
         ]
 
     chunk_models = [
@@ -187,7 +193,10 @@ def search_and_retrieve(request: RAGSearchRequest) -> RAGSearchResponse:
     detected_sources = set()
     for c in chunk_models:
         u_lower = c.url.lower()
-        if any(d in u_lower for d in ("doi.org", "oup.com", "springer", "sciencedirect", "wiley", "nature.com")):
+        if any(
+            d in u_lower
+            for d in ("doi.org", "oup.com", "springer", "sciencedirect", "wiley", "nature.com")
+        ):
             detected_sources.add("CrossRef Academic")
         elif any(d in u_lower for d in ("nih.gov", "pubmed", "pmc")):
             detected_sources.add("PubMed Central")
@@ -204,8 +213,7 @@ def search_and_retrieve(request: RAGSearchRequest) -> RAGSearchResponse:
         source_engine = "Authoritative Multi-Source Web RAG (BM25)"
 
     aggregated = "\n\n".join(
-        f"[{idx}] {c.title} ({c.url})\n{c.content}"
-        for idx, c in enumerate(chunk_models, 1)
+        f"[{idx}] {c.title} ({c.url})\n{c.content}" for idx, c in enumerate(chunk_models, 1)
     )
 
     return RAGSearchResponse(
@@ -218,5 +226,3 @@ def search_and_retrieve(request: RAGSearchRequest) -> RAGSearchResponse:
         retrieved_chunks=chunk_models,
         aggregated_context=aggregated,
     )
-
-

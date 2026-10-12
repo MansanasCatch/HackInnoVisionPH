@@ -5,20 +5,19 @@ import time
 import urllib.request
 from typing import Any
 
+from app.core.exceptions import UnprocessableError
 from app.core.logging import get_logger
 from app.repositories.device_repository import AbstractDeviceRepository
 from app.schemas.ai import (
     AIGenerateRequest,
     AIGenerateResponse,
     ExtractedFileContent,
-    StudyMaterialsResponse,
 )
 from app.services.file_parser import parse_uploaded_file
-from app.services.json_repair_service import clean_and_parse_study_json
+from app.services.generation_contract import generate_counted_materials
 from app.services.model_registry import get_model_profile
 from app.services.ollama_service import OLLAMA_BASE_URL, is_ollama_reachable
 from app.services.study_reviewer_service import (
-    build_offline_fallback_study_materials,
     build_study_prompts,
     detect_prompt_intent,
     infer_topic_from_documents,
@@ -116,66 +115,32 @@ class LocalAIService:
         # 5. Execute generation via Ollama (or offline fallback)
         ollama_online = is_ollama_reachable()
         response_text = ""
-        study_materials: StudyMaterialsResponse | None = None
 
         images_payload: list[str] = [
             f.base64_data for f in ingested_files if f.file_type == "image" and f.base64_data
         ]
 
-        if ollama_online:
-            raw_output = self._call_ollama_generate(
+        if not ollama_online:
+            raise UnprocessableError(
+                "Local Ollama is unavailable. Start Ollama and install the selected model. "
+                "Your material has not been saved or replaced."
+            )
+        study_materials = generate_counted_materials(
+            request=request,
+            topic=resolved_topic,
+            intent=intent,
+            documents=ingested_files,
+            call=lambda system, prompt: self._call_ollama_generate(
                 model=target_model,
-                prompt=user_prompt,
-                system_prompt=sys_prompt,
+                prompt=prompt,
+                system_prompt=system,
                 temperature=eff_temperature,
-                max_tokens=dynamic_max_tokens,
+                max_tokens=max(4096, dynamic_max_tokens),
                 images=images_payload,
                 format_json=True,
-            )
-            response_text = raw_output
-
-            # Attempt JSON parsing and repair
-            parsed_materials = clean_and_parse_study_json(raw_output)
-            if parsed_materials is not None:
-                study_materials = parsed_materials
-            else:
-                # LLM output could not be parsed (e.g. 404 model not pulled or bad output)
-                logger.warning(
-                    "Model '%s' output could not be parsed into study materials. "
-                    "Using deterministic fallback.",
-                    target_model,
-                )
-                study_materials = build_offline_fallback_study_materials(
-                    topic=resolved_topic,
-                    intent=intent,
-                    documents=ingested_files,
-                    warning_msg=(
-                        f"Model '{target_model}' output unparseable or error: "
-                        f"{raw_output[:60]}"
-                    ),
-                    notes_context=request.text_context,
-                )
-                warnings.append(
-                    f"Notice: Model '{target_model}' did not return valid JSON. "
-                    "Fallback study materials generated."
-                )
-        else:
-            response_text = self._build_offline_fallback_response(
-                model=target_model,
-                prompt=dynamic_prompt,
-                ingested_files=ingested_files,
-            )
-            study_materials = build_offline_fallback_study_materials(
-                topic=resolved_topic,
-                intent=intent,
-                documents=ingested_files,
-                warning_msg="Local Ollama server offline",
-                notes_context=request.text_context,
-            )
-            warnings.append(
-                "Local Ollama server is offline. "
-                "Deterministic study reviewer generated from your material."
-            )
+            ),
+        )
+        response_text = study_materials.model_dump_json()
 
         elapsed = round(time.monotonic() - start_time, 3)
 
@@ -211,6 +176,7 @@ class LocalAIService:
                 "options": {
                     "temperature": temperature,
                     "num_predict": max_tokens,
+                    "num_ctx": 16384,
                 },
             }
             if format_json:
@@ -229,10 +195,10 @@ class LocalAIService:
                 return result.get("response", "").strip()
         except Exception as err:
             logger.error("Error generating text with Ollama model '%s': %s", model, err)
-            return (
-                f"[Ollama Call Warning]: Model '{model}' failed or pulling. Error: {err}\n\n"
-                f"Generated Prompt Ready for Model:\n{prompt}"
-            )
+            raise UnprocessableError(
+                f"Ollama could not generate with model '{model}'. "
+                "Check that the model is installed and retry."
+            ) from err
 
     def _build_offline_fallback_response(
         self,

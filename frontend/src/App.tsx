@@ -642,7 +642,7 @@ function AutomationTesterPanel({ go, onboardingId, startDemo }: { go: (p: Page) 
         addLog("ASSERT", `✓ Total concept nodes in knowledge graph: ${kmap.items.length}`);
         if (kmap.items.length > 0) {
           const sample = kmap.items[0];
-          addLog("ASSERT", `✓ Sample concept "${sample.name}": mastery ${(sample.mastery * 100).toFixed(0)}%, strength: ${sample.strength}`);
+          addLog("ASSERT", `✓ Sample concept "${sample.concept_name}": mastery ${(sample.accuracy * 100).toFixed(0)}%, strength: ${sample.state}`);
         }
       }
       const dur = Math.round(performance.now() - t0);
@@ -1521,6 +1521,7 @@ function Generation({
   onResourceGenerated: (material: MaterialSet) => void;
 }) {
   const [selected, setSelected] = useState(["notes", "cards", "quiz"]);
+  const [itemCount, setItemCount] = useState(10);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [result, setResult] = useState<MaterialSet | null>(null);
@@ -1556,6 +1557,8 @@ function Generation({
       const res = await api.aiGenerateWithFiles({
         prompt: `Create study materials about ${topic}, including ${selected.map(id => wording[id]).join(", ")}.`,
         topic,
+        item_count: itemCount,
+        material_types: selected.flatMap(id => id === "notes" ? ["key_notes" as const] : id === "cards" ? ["flashcards" as const] : ["quizzes" as const, "exam" as const]),
         onboarding_id: profile.onboardingId || undefined,
         text_context: textContext || undefined,
         files: uploads,
@@ -1629,6 +1632,9 @@ function Generation({
     <div className="generation-layout">
       <section className="panel generation-card">
         <div className="section-heading"><div><p className="eyebrow">LEARNING RESOURCES</p><h3>Choose one or more</h3></div><Badge tone="neutral">{selected.length} selected</Badge></div>
+        <label className="field">Items per selected category (10–50)
+          <input type="number" min={10} max={50} step={1} value={itemCount} disabled={isGenerating || !!result} onChange={event => setItemCount(Math.max(10, Math.min(50, Math.round(Number(event.target.value) || 10))))}/>
+        </label>
         <div className="resource-select-list">{resources.map(resource => <button key={resource.id} className={selected.includes(resource.id) ? "selected" : ""} onClick={() => toggle(resource.id)} aria-pressed={selected.includes(resource.id)} disabled={isGenerating || !!result}>
           <span><Icon name={resource.icon}/></span><span><strong>{resource.title}</strong><small>{resource.copy}</small></span><i>{selected.includes(resource.id) && <Icon name="check" size={15}/>}</i>
         </button>)}</div>

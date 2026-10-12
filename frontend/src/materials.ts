@@ -180,16 +180,15 @@ export function combineMaterialSets(sets: MaterialSet[]): MaterialSet {
   const allQuizzes = sets.flatMap((s) => s.materials.quizzes || []);
   const allExamQuestions = sets.flatMap((s) => s.materials.exam?.questions || []);
 
-  const totalQuestions = allQuizzes.length + allExamQuestions.length;
 
   const combinedMaterials: StudyMaterialsResponse = {
+    intent: "study_reviewer",
+    source_coverage: { covered_topics: sets.flatMap(s => s.materials.source_coverage?.covered_topics || []), content_gaps: sets.flatMap(s => s.materials.source_coverage?.content_gaps || []) },
     topic: combinedTopic,
     direct_answer: `Master Practice Review combining ${sets.length} study sets (${combinedTopic}).`,
     source_summary: `Combined from ${sets.length} saved study resources: ${sets.map((s) => s.topic).join(", ")}.`,
     summary: {
-      title: `${combinedTopic} — Combined Master Review`,
       content: `Comprehensive master practice set pooling materials, flashcards, and quizzes from ${sets.length} study topics.`,
-      estimated_reading_minutes: Math.max(5, Math.ceil(allSections.length * 2)),
     },
     key_notes: allKeyNotes,
     reviewer: {
@@ -200,8 +199,8 @@ export function combineMaterialSets(sets: MaterialSet[]): MaterialSet {
     quizzes: allQuizzes,
     exam: {
       title: `${combinedTopic} — Master Practice Exam`,
-      total_questions: totalQuestions,
-      time_limit_minutes: Math.max(20, Math.ceil(totalQuestions * 1.5)),
+      total_questions: allExamQuestions.length,
+      total_points: allExamQuestions.reduce((sum, question) => sum + question.points, 0),
       questions: allExamQuestions,
     },
   };

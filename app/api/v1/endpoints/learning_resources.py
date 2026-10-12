@@ -31,6 +31,7 @@ async def generate_learning_resource(
     onboarding_id: Annotated[int, Form(ge=1)],
     topic: Annotated[str, Form()],
     notes: Annotated[str, Form()] = "",
+    item_count: Annotated[int, Form(ge=10, le=50)] = 10,
     resource_types: Annotated[list[StudyResourceType] | None, Form()] = None,
     files: Annotated[list[UploadFile] | None, File()] = None,
 ) -> GeneratedLearningResource:
@@ -42,7 +43,9 @@ async def generate_learning_resource(
         notes=notes,
         resource_types=resource_types,
         uploaded_files=uploaded,
+        item_count=item_count,
     )
+
 
 @router.post(
     "",

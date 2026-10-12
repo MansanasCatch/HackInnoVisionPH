@@ -295,6 +295,8 @@ export interface HealthResponse {
 }
 
 export interface AIGenerateRequest {
+  item_count?: number;
+  material_types?: ("key_notes" | "flashcards" | "quizzes" | "exam")[];
   prompt: string;
   topic?: string;
   onboarding_id?: number;

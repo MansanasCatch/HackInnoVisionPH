@@ -138,12 +138,15 @@ export const api = {
     const { files, ...fields } = data;
     const form = new FormData();
     Object.entries(fields).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== "") form.append(key, String(value));
+      if (value !== undefined && value !== null && value !== "") {
+        if (Array.isArray(value)) value.forEach(item => form.append(key, String(item)));
+        else form.append(key, String(value));
+      }
     });
     (files || []).forEach((file) => form.append("files", file));
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 180000); // local LLMs can be slow
+    const timeoutId = setTimeout(() => controller.abort(), 1800000); // bounded batches for up to 50 items
     try {
       const res = await fetch(`${BASE_URL}/ai/generate-with-files`, {
         method: "POST",
