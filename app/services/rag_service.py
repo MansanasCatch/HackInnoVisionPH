@@ -151,31 +151,8 @@ def bm25_rank_chunks(
 from html.parser import HTMLParser
 
 
-class _HTMLTextExtractor(HTMLParser):
-    """Extract visible paragraph and content text from HTML, stripping boilerplate."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.texts: list[str] = []
-        self._ignore = False
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag.lower() in ("script", "style", "noscript", "nav", "footer", "header", "aside", "form"):
-            self._ignore = True
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag.lower() in ("script", "style", "noscript", "nav", "footer", "header", "aside", "form"):
-            self._ignore = False
-
-    def handle_data(self, data: str) -> None:
-        if not self._ignore:
-            cleaned = data.strip()
-            if len(cleaned) > 25:
-                self.texts.append(cleaned)
-
-
-def _fetch_webpage_content(url: str, timeout: float = 3.0) -> str | None:
-    """Fetch and parse clean body text from a webpage."""
+def _fetch_webpage_content(url: str, timeout: float = 3.5) -> str | None:
+    """Fetch and parse clean body text from a webpage, extracting instructional article paragraphs."""
     if not url.startswith("http://") and not url.startswith("https://"):
         return None
     try:
@@ -190,12 +167,38 @@ def _fetch_webpage_content(url: str, timeout: float = 3.0) -> str | None:
             content_type = resp.headers.get("Content-Type", "").lower()
             if "text/html" not in content_type and "text/plain" not in content_type:
                 return None
-            raw_html = resp.read(250000).decode("utf-8", errors="ignore")
-            extractor = _HTMLTextExtractor()
-            extractor.feed(raw_html)
-            clean_text = " ".join(extractor.texts).strip()
-            if len(clean_text) > 100:
-                return clean_text[:4000]
+            raw_html = resp.read(350000).decode("utf-8", errors="ignore")
+
+            # Remove non-content elements and boilerplate containers
+            cleaned_html = re.sub(
+                r"<(script|style|nav|header|footer|aside|noscript|form|svg)[^>]*>.*?</\1>",
+                "",
+                raw_html,
+                flags=re.DOTALL | re.IGNORECASE,
+            )
+
+            # Extract substantive <p> paragraphs
+            raw_paras = re.findall(r"<p[^>]*>(.*?)</p>", cleaned_html, flags=re.DOTALL | re.IGNORECASE)
+            substantive_paras: list[str] = []
+            for raw in raw_paras:
+                clean = re.sub(r"<[^>]+>", "", raw).strip()
+                clean = re.sub(r"\s+", " ", clean)
+                # Keep real educational sentences (at least 50 chars, ends with punctuation)
+                if len(clean) >= 50 and any(clean.endswith(p) for p in (".", "!", "?", ":", ";")):
+                    # Skip common web footer/header noise
+                    if not any(bp in clean.lower() for bp in ("copyright", "all rights reserved", "privacy policy", "terms of service", "cookie", "advertisement", "subscribe to", "sign up")):
+                        substantive_paras.append(clean)
+
+            if substantive_paras:
+                clean_text = " ".join(substantive_paras).strip()
+                if len(clean_text) > 80:
+                    return clean_text[:5000]
+
+            # Fallback if page doesn't use standard <p> tags: parse visible text
+            body_text = re.sub(r"<[^>]+>", " ", cleaned_html)
+            body_text = re.sub(r"\s+", " ", body_text).strip()
+            if len(body_text) > 100:
+                return body_text[:4000]
     except Exception:
         pass
     return None

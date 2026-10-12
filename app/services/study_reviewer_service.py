@@ -348,12 +348,23 @@ def build_offline_fallback_study_materials(
             continue
         if s.startswith("http://") or s.startswith("https://"):
             continue
+        if any(s.lower().startswith(meta) for meta in ("scholarly reference on", "peer-reviewed study published in")):
+            continue
         # Strip embedded URLs or bracketed citations from the sentence body
         s_clean = re.sub(r"https?://\S+", "", s)
         s_clean = re.sub(r"\[\d+\]", "", s_clean).strip(" ()[]-*\t")
-        if len(s_clean) >= 20 and s_clean.lower() not in seen:
+        words = s_clean.split()
+        if len(words) >= 5 and len(s_clean) >= 25 and s_clean.lower() not in seen:
             seen.add(s_clean.lower())
             sentences.append(s_clean.rstrip("."))
+
+    # Prioritize substantive sentences that contain topic keywords
+    topic_words = {w.lower() for w in re.findall(r"\w+", resolved_topic) if len(w) >= 3}
+    if topic_words and sentences:
+        sentences.sort(
+            key=lambda sent: len({w.lower() for w in re.findall(r"\w+", sent)} & topic_words),
+            reverse=True,
+        )
 
     sample_summary = (
         ". ".join(sentences[:3]) + "."
