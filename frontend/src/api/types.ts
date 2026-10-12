@@ -346,7 +346,9 @@ export interface RAGSearchResponse {
   success: boolean;
   query: string;
   source_engine: string;
+  search_engine?: string;
   total_sources: number;
+  total_chunks?: number;
   retrieved_chunks: RAGChunkItem[];
   aggregated_context: string;
 }

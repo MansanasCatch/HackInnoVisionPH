@@ -341,16 +341,26 @@ def build_offline_fallback_study_materials(
     sentences: list[str] = []
     for raw in re.split(r"(?<=[.!?])\s+|\n+", all_text):
         s = raw.strip(" -*\t")
-        if len(s) > 15 and s.lower() not in seen:
-            seen.add(s.lower())
-            sentences.append(s.rstrip("."))
+        if not s or len(s) < 20:
+            continue
+        # Skip pure URL / citation headers (e.g. "[1] Title (https://...)")
+        if re.match(r"^\[\d+\]", s) and ("http://" in s or "https://" in s):
+            continue
+        if s.startswith("http://") or s.startswith("https://"):
+            continue
+        # Strip embedded URLs or bracketed citations from the sentence body
+        s_clean = re.sub(r"https?://\S+", "", s)
+        s_clean = re.sub(r"\[\d+\]", "", s_clean).strip(" ()[]-*\t")
+        if len(s_clean) >= 20 and s_clean.lower() not in seen:
+            seen.add(s_clean.lower())
+            sentences.append(s_clean.rstrip("."))
 
     sample_summary = (
         ". ".join(sentences[:3]) + "."
         if sentences
         else f"Study materials derived from uploaded documents on {resolved_topic}."
     )
-    first_fact = sentences[0] if sentences else f"Introduction to {resolved_topic}"
+    first_fact = sentences[0] if sentences else f"Foundational concepts and mechanisms governing {resolved_topic}"
     direct_ans = f"Based on the source text: {first_fact}." if intent == "question" else None
 
     # Chunk sentences into themed notes / reviewer sections (3 sentences each, max 4 chunks)

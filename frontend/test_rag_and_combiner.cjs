@@ -70,7 +70,11 @@ const fs = require('fs');
       await searchBtn.click();
 
       // Wait for search result chunk or completion (up to 15s)
-      await page.waitForTimeout(4000);
+      try {
+        await page.locator('.browse-rag-section').filter({ hasText: /Retrieved/i }).waitFor({ timeout: 15000 });
+      } catch (e) {
+        await page.waitForTimeout(5000);
+      }
 
       const ragScreenshotPath = path.join(artDir, 'rag_1_search_chunks.png');
       await page.screenshot({ path: ragScreenshotPath });

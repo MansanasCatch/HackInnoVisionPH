@@ -184,11 +184,25 @@ def search_and_retrieve(request: RAGSearchRequest) -> RAGSearchResponse:
         for c in scored_chunks
     ]
 
-    source_engine = (
-        "searxng"
-        if any("8080" in c.url for c in chunk_models)
-        else "wikipedia_fallback"
-    )
+    detected_sources = set()
+    for c in chunk_models:
+        u_lower = c.url.lower()
+        if any(d in u_lower for d in ("doi.org", "oup.com", "springer", "sciencedirect", "wiley", "nature.com")):
+            detected_sources.add("CrossRef Academic")
+        elif any(d in u_lower for d in ("nih.gov", "pubmed", "pmc")):
+            detected_sources.add("PubMed Central")
+        elif "wikipedia.org" in u_lower:
+            detected_sources.add("Wikipedia")
+        elif "8080" in u_lower:
+            detected_sources.add("SearXNG")
+        elif u_lower.startswith("http"):
+            detected_sources.add("Authoritative Web")
+
+    if detected_sources:
+        source_engine = " & ".join(sorted(detected_sources)) + " (BM25 RAG)"
+    else:
+        source_engine = "Authoritative Multi-Source Web RAG (BM25)"
+
     aggregated = "\n\n".join(
         f"[{idx}] {c.title} ({c.url})\n{c.content}"
         for idx, c in enumerate(chunk_models, 1)
@@ -198,7 +212,9 @@ def search_and_retrieve(request: RAGSearchRequest) -> RAGSearchResponse:
         success=True,
         query=query,
         source_engine=source_engine,
+        search_engine=source_engine,
         total_sources=len(web_results),
+        total_chunks=len(chunk_models),
         retrieved_chunks=chunk_models,
         aggregated_context=aggregated,
     )

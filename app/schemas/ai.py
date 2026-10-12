@@ -209,8 +209,10 @@ class RAGSearchResponse(BaseModel):
 
     success: bool = True
     query: str
-    source_engine: str
-    total_sources: int
+    source_engine: str = "Authoritative Multi-Source Web RAG"
+    search_engine: str = "Authoritative Multi-Source Web RAG"
+    total_sources: int = 0
+    total_chunks: int = 0
     retrieved_chunks: list[RAGChunkItem] = Field(default_factory=list)
     aggregated_context: str = ""
 

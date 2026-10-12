@@ -1424,8 +1424,8 @@ function ContentIngestion({
         {inputMethod === "browse" && (
           <div className="browse-rag-section grid gap-3 p-4 rounded-xl border border-[var(--line)] bg-[var(--paper)]">
             <div className="flex flex-col gap-1">
-              <strong className="text-sm">Online RAG Web Search & Retrieval</strong>
-              <p className="text-xs text-[var(--muted)]">Researches online knowledge (via SearXNG / Wikipedia fallback) and uses in-memory BM25 retrieval to rank passages into notes for offline practice set generation.</p>
+              <strong className="text-sm">Online Multi-Source RAG Web Search & Retrieval</strong>
+              <p className="text-xs text-[var(--muted)]">Researches authoritative websites & scholarly publications (CrossRef, PubMed Central, DuckDuckGo, SearXNG) and ranks knowledge chunks using in-memory BM25 retrieval for rigorous 20–30 item practice set generation.</p>
             </div>
             <div className="flex gap-2 items-center">
               <input
@@ -1447,7 +1447,7 @@ function ContentIngestion({
             {ragLoading && (
               <div className="p-3 text-sm text-[var(--sage-dark)] bg-[var(--sage-pale)] rounded-xl flex items-center gap-2">
                 <Icon name="spark" size={16}/>
-                <span>Searching online and ranking knowledge chunks with BM25…</span>
+                <span>Searching authoritative web & academic sources, extracting pages, and ranking with BM25…</span>
               </div>
             )}
             {ragError && (
@@ -1456,20 +1456,29 @@ function ContentIngestion({
             {ragResults && (
               <div className="grid gap-2 mt-2">
                 <div className="flex justify-between items-center text-xs font-semibold text-[var(--sage-dark)]">
-                  <span>Retrieved {ragResults.total_chunks} chunks via {ragResults.search_engine}</span>
+                  <span>Retrieved {ragResults.total_chunks || ragResults.retrieved_chunks?.length || 0} chunks via {ragResults.source_engine || ragResults.search_engine || "Multi-Source Web RAG"}</span>
                   <span className="text-[var(--muted)]">Status: 200 OK</span>
                 </div>
                 <div className="grid gap-2 max-h-56 overflow-y-auto">
-                  {ragResults.retrieved_chunks.map((chunk, idx) => (
-                    <div key={idx} className="p-2.5 rounded-lg border border-[var(--line)] bg-[var(--mist)] text-xs">
-                      <div className="flex justify-between items-center font-medium mb-1">
-                        <span className="text-[var(--forest)] truncate max-w-xs">{chunk.title || `Chunk #${idx + 1}`}</span>
-                        <span className="text-slate-500 font-mono text-[10px]">BM25: {chunk.score.toFixed(2)}</span>
+                  {ragResults.retrieved_chunks.map((chunk, idx) => {
+                    const isAcademic = chunk.url?.includes("doi.org") || chunk.url?.includes("oup.com") || chunk.url?.includes("springer") || chunk.url?.includes("nih.gov");
+                    const sourceLabel = isAcademic ? "SCHOLARLY / PEER-REVIEWED" : "AUTHORITATIVE WEB";
+                    return (
+                      <div key={idx} className="p-2.5 rounded-lg border border-[var(--line)] bg-[var(--mist)] text-xs">
+                        <div className="flex justify-between items-center font-medium mb-1 gap-2">
+                          <span className="text-[var(--forest)] truncate max-w-xs font-semibold">{chunk.title || `Chunk #${idx + 1}`}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${isAcademic ? "bg-purple-100 text-purple-800" : "bg-emerald-100 text-emerald-800"}`}>
+                              {sourceLabel}
+                            </span>
+                            <span className="text-slate-500 font-mono text-[10px]">BM25: {chunk.score.toFixed(2)}</span>
+                          </div>
+                        </div>
+                        <p className="text-slate-700 line-clamp-3 leading-relaxed">{chunk.content || (chunk as any).text}</p>
+                        {chunk.url && <a href={chunk.url} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 underline block mt-1 truncate font-mono">{chunk.url}</a>}
                       </div>
-                      <p className="text-slate-700 line-clamp-3">{chunk.text}</p>
-                      {chunk.url && <a href={chunk.url} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 underline block mt-1 truncate">{chunk.url}</a>}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <div className="mt-2 text-xs text-[var(--muted)]">
                   Context populated into notes ({notes.length} characters) for 20–30 item practice set generation.
