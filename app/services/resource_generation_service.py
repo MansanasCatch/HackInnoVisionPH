@@ -35,6 +35,7 @@ class ResourceGenerationService:
         notes: str,
         resource_types: list[StudyResourceType] | None,
         uploaded_files: list[tuple[str, bytes, str | None]],
+        item_count: int = 10,
     ) -> GeneratedLearningResource:
         """Generate materials, then store them as a resource with a first version."""
         if self._onboarding.get(onboarding_id) is None:
@@ -47,7 +48,11 @@ class ResourceGenerationService:
 
         response = self._ai.generate(
             AIGenerateRequest(
-                prompt="", topic=topic, text_context=notes or None, onboarding_id=onboarding_id
+                prompt="",
+                topic=topic,
+                text_context=notes or None,
+                onboarding_id=onboarding_id,
+                item_count=item_count,
             ),
             uploaded_files,
         )

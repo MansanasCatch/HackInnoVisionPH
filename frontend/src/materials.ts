@@ -126,10 +126,17 @@ function resolveAnswerIndex(options: string[], correct: string): number {
 
 /** Only questions we can render as multiple choice; others are skipped rather than mis-graded. */
 export function toQuizItems(m: Partial<StudyMaterialsResponse> | undefined): QuizItem[] {
-  const pool = [
+  const rawPool = [
     ...(m?.quizzes || []),
-    ...(m?.quizzes?.length ? [] : m?.exam?.questions || []),
+    ...(m?.exam?.questions || []),
   ];
+  const seen = new Set<string>();
+  const pool = rawPool.filter((q) => {
+    const key = (q.question || "").trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   const items: QuizItem[] = [];
   for (const q of pool) {
     const options =
@@ -151,3 +158,64 @@ export function toQuizItems(m: Partial<StudyMaterialsResponse> | undefined): Qui
   }
   return items;
 }
+
+/**
+ * Merges multiple MaterialSets into a single unified MaterialSet.
+ * Pools reviewer sections, flashcards, quizzes, and exam questions,
+ * creating a comprehensive master set of 20-30+ items for review and practice.
+ */
+export function combineMaterialSets(sets: MaterialSet[]): MaterialSet {
+  if (sets.length === 0) {
+    throw new Error("Cannot combine an empty list of material sets.");
+  }
+  if (sets.length === 1) {
+    return sets[0];
+  }
+
+  const combinedTopic = sets.map((s) => s.topic).filter(Boolean).join(" & ");
+  const combinedFileNames = Array.from(new Set(sets.flatMap((s) => s.fileNames)));
+  const allSections = sets.flatMap((s) => s.materials.reviewer?.sections || []);
+  const allKeyNotes = sets.flatMap((s) => s.materials.key_notes || []);
+  const allFlashcards = sets.flatMap((s) => s.materials.flashcards || []);
+  const allQuizzes = sets.flatMap((s) => s.materials.quizzes || []);
+  const allExamQuestions = sets.flatMap((s) => s.materials.exam?.questions || []);
+
+
+  const combinedMaterials: StudyMaterialsResponse = {
+    intent: "study_reviewer",
+    source_coverage: { covered_topics: sets.flatMap(s => s.materials.source_coverage?.covered_topics || []), content_gaps: sets.flatMap(s => s.materials.source_coverage?.content_gaps || []) },
+    topic: combinedTopic,
+    direct_answer: `Master Practice Review combining ${sets.length} study sets (${combinedTopic}).`,
+    source_summary: `Combined from ${sets.length} saved study resources: ${sets.map((s) => s.topic).join(", ")}.`,
+    summary: {
+      content: `Comprehensive master practice set pooling materials, flashcards, and quizzes from ${sets.length} study topics.`,
+    },
+    key_notes: allKeyNotes,
+    reviewer: {
+      title: `${combinedTopic} (Combined Master Reviewer)`,
+      sections: allSections,
+    },
+    flashcards: allFlashcards,
+    quizzes: allQuizzes,
+    exam: {
+      title: `${combinedTopic} — Master Practice Exam`,
+      total_questions: allExamQuestions.length,
+      total_points: allExamQuestions.reduce((sum, question) => sum + question.points, 0),
+      questions: allExamQuestions,
+    },
+  };
+
+  return {
+    topic: `${combinedTopic} (Combined Set)`,
+    model: "Master Combiner",
+    seconds: 0,
+    online: true,
+    warnings: [],
+    fileNames: combinedFileNames,
+    materials: combinedMaterials,
+    resourceId: undefined,
+    versionId: undefined,
+    onboardingId: sets[0].onboardingId,
+  };
+}
+

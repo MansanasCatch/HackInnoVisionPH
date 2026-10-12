@@ -53,6 +53,12 @@ class AIGenerateRequest(BaseModel):
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Sampling temperature")
     max_tokens: int = Field(default=2048, ge=1, le=8192, description="Maximum tokens to generate")
     text_context: str | None = Field(default=None, description="Additional context or notes text")
+    item_count: int = Field(
+        default=10, ge=10, le=50, description="Exact count per selected item category"
+    )
+    material_types: list[Literal["key_notes", "flashcards", "quizzes", "exam"]] = Field(
+        default_factory=lambda: ["key_notes", "flashcards", "quizzes", "exam"], min_length=1
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -184,3 +190,35 @@ class AIGenerateResponse(BaseModel):
         default_factory=list,
         description="User warnings regarding token budgeting, OCR notices, or truncation",
     )
+
+
+class RAGSearchRequest(BaseModel):
+    """Request model for topic web search and RAG retrieval."""
+
+    topic: str = Field(description="Search topic or question to research online")
+    max_results: int = Field(default=5, ge=1, le=10, description="Max search results to retrieve")
+    top_k_chunks: int = Field(default=6, ge=1, le=12, description="Top ranked chunks to return")
+
+
+class RAGChunkItem(BaseModel):
+    """Individual retrieved and scored chunk."""
+
+    chunk_id: int
+    title: str
+    url: str
+    content: str
+    score: float
+
+
+class RAGSearchResponse(BaseModel):
+    """Response model containing retrieved and ranked RAG chunks."""
+
+    success: bool = True
+    query: str
+    source_engine: str = "Authoritative Multi-Source Web RAG"
+    search_engine: str = "Authoritative Multi-Source Web RAG"
+    total_sources: int = 0
+    total_chunks: int = 0
+    retrieved_chunks: list[RAGChunkItem] = Field(default_factory=list)
+    aggregated_context: str = ""
+
